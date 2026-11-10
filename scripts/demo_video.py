@@ -226,6 +226,31 @@ def carried_issues(issues: list[dict[str, Any]]) -> list[str]:
     return carried
 
 
+def _silence_the_sqlite_version_warning() -> None:
+    """Drop Hermes' own SQLite-version warning from the recording.
+
+    Hermes warns when the interpreter's SQLite is old enough to have the
+    WAL-reset bug. The fault is the *Python that is running this script*, not
+    the plugin — but the warning names the plugin's own database file, because
+    that is the first file Hermes opens, so on screen it reads as a corruption
+    warning about the thing the video is trying to show. It also lands in the
+    middle of the first phase, over the catalogue counts.
+
+    Hermes states this correctly elsewhere ("no live downgrade under concurrent
+    openers" — the database is left in WAL mode and keeps working). The
+    warning is suppressed for the recording only; ``--show-toolchain-warnings``
+    keeps it, and the fix for an operator who wants it gone is
+    ``hermes update``, exactly as Hermes says.
+    """
+    import logging
+
+    class _DropWalResetWarning(logging.Filter):
+        def filter(self, record: logging.LogRecord) -> bool:
+            return "walresetbug" not in record.getMessage()
+
+    logging.getLogger("hermes_state").addFilter(_DropWalResetWarning())
+
+
 def main(argv: list[str] | None = None) -> int:
     for stream in (sys.stdout, sys.stderr):
         try:
@@ -256,11 +281,23 @@ def main(argv: list[str] | None = None) -> int:
         help="the code model the operator blocks (default: %(default)s)",
     )
     parser.add_argument(
+        "--show-toolchain-warnings",
+        action="store_true",
+        help=(
+            "keep Hermes' SQLite-version warning on screen. It is suppressed "
+            "by default because it is about the interpreter, not the plugin, "
+            "and it lands in the middle of the first phase."
+        ),
+    )
+    parser.add_argument(
         "--output",
         default=str(REPO_ROOT / "demo_output"),
         help="where the transcript is written (default: %(default)s)",
     )
     args = parser.parse_args(argv)
+
+    if not args.show_toolchain_warnings:
+        _silence_the_sqlite_version_warning()
 
     if not args.approve_spend:
         print(
