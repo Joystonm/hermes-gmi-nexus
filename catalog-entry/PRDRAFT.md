@@ -7,11 +7,11 @@ ROUTE → EXECUTE → EVALUATE → RECOVER → LEARN → REPORT** — and report
 actually ran, what it cost and what failed.
 
 - **Repository:** https://github.com/Joystonm/hermes-gmi-nexus
-- **Pinned commit:** `b4c38f2e6c850ce295fa76265e3b68ed630f26ba`
+- **Pinned commit:** `dc8222f0d0ae49f6340ed7d27c712187b990e104`
 - **Subdirectory:** `plugins/gmi-nexus`
 - **Maintainer:** Joystonm
 - **Category:** `models` · **Tier:** `community` · **Requires Hermes:** `>=0.21.6`
-- **Demo:** [`docs/demo/gmi-nexus-demo.mp4`](https://github.com/Joystonm/hermes-gmi-nexus/blob/b4c38f2e6c850ce295fa76265e3b68ed630f26ba/docs/demo/gmi-nexus-demo.mp4) — 70 seconds, one continuous live run, with narration. Every number in it came out of that run; nothing in it was drawn by hand.
+- **Demo:** [`docs/demo/gmi-nexus-demo.mp4`](https://github.com/Joystonm/hermes-gmi-nexus/blob/dc8222f0d0ae49f6340ed7d27c712187b990e104/docs/demo/gmi-nexus-demo.mp4) — 70 seconds, one continuous live run, with narration. Every number in it came out of that run; nothing in it was drawn by hand.
 
 ## What this plugin does
 
@@ -85,11 +85,11 @@ plugin's own README, which is the page the catalog renders.
 Four levels, kept separate; see the plugin's
 `docs/HERMES_VALIDATION.md` for the full report.
 
-1. **Unit** — 230 tests, 6 skipped (the live ones), all passing. No network,
+1. **Unit** — 244 tests, 6 skipped (the live ones), all passing. No network,
    no cost. Under Hermes' own `web` pins the same suite is **229 passed,
    5 skipped**, with the real `fastapi` router loaded. (That pinned figure was
-   recorded before the suite grew by the test covering the generation-latency
-   fix.)
+   recorded before the suite grew by the tests covering the generation-latency
+   fix, the retired-model verdict and the malformed-JSON repair.)
 2. **Mock integration** — the real pipeline, router, executor, evaluator,
    storage, budget and dashboard API, with only the HTTP layer stubbed.
    `scripts/demo_run.py --dry-run` runs the whole scenario end to end this
@@ -102,7 +102,7 @@ Four levels, kept separate; see the plugin's
    opt-in behind `GMI_LIVE_TESTS=1`, and every live figure quoted anywhere
    in this repository is an **estimate priced at the catalogue's published
    rates** — GMI's usage block reports token counts and no dollar amount, so
-   no billed total is claimed. The whole live exercise cost **just under $1**
+   no billed total is claimed. The whole live exercise cost **just over $1**
    of the project's $10 ceiling.
 4. **Hermes plugin** — `hermes plugins validate ./plugins/gmi-nexus
    --install-deps` passes with a `safe` security scan, and
