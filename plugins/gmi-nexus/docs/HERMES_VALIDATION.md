@@ -19,14 +19,14 @@ document says so.
 
 ## Level 1 — unit tests
 
-**228 tests, 6 skipped. All passing.**
+**230 tests, 6 skipped. All passing.**
 
 ```
 $ python -m pytest tests/
-228 passed, 6 skipped in 13.79s
+230 passed, 6 skipped in 13.88s
 ```
 
-On an interpreter carrying Hermes' own `web` pins the same suite is **228
+On an interpreter carrying Hermes' own `web` pins the same suite is **230
 passed, 5 skipped** — see *The environment the tests run in* below.
 
 Each test file covers one module:
@@ -34,7 +34,7 @@ Each test file covers one module:
 | File | Tests | What it covers |
 | --- | --- | --- |
 | `test_classifier.py` | 11 | Goal classification, and the capabilities each task type requires. |
-| `test_registry.py` | 13 | Catalogue reading, the TTL cache, capability extraction, the catalogue ordering, probe results, and the refusal to restore a verdict from an older probe protocol. |
+| `test_registry.py` | 15 | Catalogue reading, the TTL cache, capability extraction, the catalogue ordering, probe results, and the refusal to restore a verdict from an older probe protocol. |
 | `test_router.py` | 26 | Scoring, the essential-capability filter, the rejected list and its reasons. |
 | `test_pipeline.py` | 25 | The eight-step pipeline end to end, with the provider mocked — including that a generation step is routed against the generation catalogue, that the published route names the model that ran, and that a step is given the token budget its answer needs. |
 | `test_arena.py` | 15 | Identical test cases across models, the dimensions, the reports. |
@@ -62,7 +62,7 @@ suite was re-run in a virtual environment carrying Hermes' declared pins:
 
 ```
 $ python -m pytest tests/          # fastapi 0.133.1, starlette 1.9.0
-228 passed, 5 skipped in 12.81s
+230 passed, 5 skipped in 12.81s
 ```
 
 Under those pins the plugin's real `dashboard/plugin_api.py` was loaded
@@ -155,8 +155,8 @@ of every live call is computed from the catalogue's published rates. These
 are **estimates at list price**, not bills, and they are labelled as such
 everywhere they appear.
 
-The live exercise found seven defects that the mocked suite could not, and
-all seven are fixed:
+The live exercise found eight defects that the mocked suite could not, and
+all eight are fixed:
 
 1. **The multimodal part type was spelled the wrong way.** The vision path
    sent `{"type": "image"}` — the Anthropic spelling. GMI's endpoint is
@@ -211,6 +211,20 @@ all seven are fixed:
    in `nexus_report` and on the dashboard read **0.4 s** for a generation
    that took half a minute. The clock now starts before the submission, so
    the number reported is the number the caller experienced.
+
+8. **A catalogue that could not be read was reported as an empty one.** A
+   live run with a rejected API key produced `language models 0`,
+   `generation models 0`, and then — for every step of the plan —
+   *"no model in the live catalogue satisfies coding"*, *"no media model was
+   available for this request"*, *"no code-capable model is available in the
+   live catalogue"*. Every one of those reads like a fact about GMI Cloud.
+   Each was in fact a fact about the request. The registry had recorded the
+   reason all along (`llm catalogue: Invalid API key; media catalogue:
+   Invalid API key`) and nothing carried it forward. The error now reaches
+   every place that reports an empty catalogue, and both demo scripts stop
+   rather than run a pipeline against a catalogue that was never fetched.
+   This one was not found by a probe — it was found by a live run with a
+   credential that had been rotated out from under the plugin.
 
 The live run also showed that the catalogue's own code model,
 `Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8`, answers **every** request with

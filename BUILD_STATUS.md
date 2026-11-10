@@ -352,6 +352,43 @@ the bytes to move into the vision model. And the reel stops at the vision
 phase if the generation produced no image at all, rather than carrying an
 empty step forward as though it had worked.
 
+#### The eighth defect, found by a live run with a rejected key
+
+A live run was started with a credential that GMI Cloud rejected. The
+catalogue read failed, and the plugin reported it as an **empty catalogue**:
+
+```
+  language models            0
+  generation models          0
+  step 0 -> planning         (none)   score None
+  ...
+  error                      no media model was available for this request
+  error                      no code-capable model is available in the live catalogue
+```
+
+Every one of those lines reads like a fact about GMI Cloud — as though the
+catalogue were genuinely empty, or as though the task were one no model
+could serve. Each was in fact a fact about the request. The registry had
+recorded the reason all along:
+
+```
+llm catalogue: Invalid API key; media catalogue: Invalid API key
+```
+
+and nothing carried it forward to the caller.
+
+This is the same class of error as the other seven, and the brief's own
+rule against reporting a failure as a success. An empty catalogue and a
+catalogue that could not be read are two different states, and only one of
+them is a statement about GMI Cloud.
+
+The fix puts the reason where the emptiness is reported: the executor's
+`NoEligibleModel`, the creative module's `no_candidate`, the Dev Agent's
+no-code-model, and both demo scripts — which now print the error and stop,
+because a reel that records ninety seconds of "no eligible model" is worse
+than no reel at all. Two regression tests cover it, and the demo script's
+refusal is visible in the transcript the script writes.
+
 ### Documentation
 
 | Document | Covers |
@@ -435,10 +472,10 @@ commit.
 
 ```
 $ python -m pytest tests/
-228 passed, 6 skipped in 13.79s
+230 passed, 6 skipped in 13.88s
 ```
 
-On an interpreter carrying Hermes' own `web` pins the same suite was **228
+On an interpreter carrying Hermes' own `web` pins the same suite was **230
 passed, 5 skipped** — the sixth skip is the environment test that reports the
 `fastapi`/`starlette` mismatch, and it passes once the versions agree. The pins
 are installed into a virtual environment, so the system interpreter is never

@@ -35,7 +35,7 @@ plugin **directory**, so development tooling must not travel inside it.
 | [`scripts/demo_video.py`](scripts/demo_video.py) | The short live run the demo video records — five phases, under ninety seconds. |
 | [`scripts/validate_installation.py`](scripts/validate_installation.py) | Loads the plugin the way Hermes loads it and proves the contract holds. |
 | [`scripts/make_banner.py`](scripts/make_banner.py) | Draws the banner. A development tool — it needs Pillow, which the plugin itself does not. |
-| [`scripts/probes/`](scripts/probes/) | The one-off scripts that found the seven defects the mocked tests could not. Not part of the plugin; each one is documented in [its README](scripts/probes/README.md). |
+| [`scripts/probes/`](scripts/probes/) | The one-off scripts that found seven of the eight defects the mocked tests could not. Not part of the plugin; each one is documented in [its README](scripts/probes/README.md). |
 | [`BUILD_STATUS.md`](BUILD_STATUS.md) | What is done, what is not, and what was tested. |
 
 ---
@@ -204,14 +204,15 @@ and `--approve-spend`, it prints what it is about to spend before it spends
 it, and it does not raise the plugin's own limits.
 
 It has been run end to end against the real service, six times. That is how
-seven defects surfaced which the mocked tests could not find — among them a
+eight defects surfaced which the mocked tests could not find — among them a
 catalogue model that answered `"456"` for a number it had never seen, a code
 model whose replies came back cut off mid-JSON because the token budget was
-too small for a source file, and a reported generation latency of 0.4
-seconds for a generation that had really taken half a minute. All seven are
-fixed, and all seven have regression tests. The whole live exercise cost about
-**$0.87** of the project's $10 ceiling; [`BUILD_STATUS.md`](BUILD_STATUS.md)
-accounts for every figure.
+too small for a source file, a reported generation latency of 0.4
+seconds for a generation that had really taken half a minute, and a rejected
+API key that was reported as an empty catalogue rather than as a rejected
+key. All eight are fixed, and all eight have regression tests. The whole live
+exercise cost about **$0.87** of the project's $10 ceiling;
+[`BUILD_STATUS.md`](BUILD_STATUS.md) accounts for every figure.
 
 ### The short run, for recording
 
@@ -257,7 +258,7 @@ python -m venv .venv && .venv/Scripts/python -m pip install \
 .venv/Scripts/python -m pytest tests/       # 229 passed, 5 skipped
 ```
 
-That run was last recorded at 228 passed and 5 skipped, before the suite grew
+That run was last recorded at 230 passed and 5 skipped, before the suite grew
 by the test that covers the generation-latency fix.
 
 That changes nothing about the machine you run it on — the pins live in the

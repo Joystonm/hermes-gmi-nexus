@@ -57,7 +57,8 @@ billed amount, and none of them pretends to.
 ## What the probes found
 
 Seven defects. Every one of them is fixed, and every one of them has a
-regression test.
+regression test. An eighth was found afterwards by a live run with a
+rejected credential — it was not a probe's doing, so it is not on this page.
 
 **Vision.**
 

@@ -82,7 +82,7 @@ plugin's own README, which is the page the catalog renders.
 Four levels, kept separate; see the plugin's
 `docs/HERMES_VALIDATION.md` for the full report.
 
-1. **Unit** — 228 tests, 6 skipped (the live ones), all passing. No network,
+1. **Unit** — 230 tests, 6 skipped (the live ones), all passing. No network,
    no cost. Under Hermes' own `web` pins the same suite is **229 passed,
    5 skipped**, with the real `fastapi` router loaded. (That pinned figure was
    recorded before the suite grew by the test covering the generation-latency
@@ -109,8 +109,8 @@ Four levels, kept separate; see the plugin's
 ### What the live run found that the mocked tests could not
 
 Worth saying plainly, because it is the argument for running a plugin
-against the real service rather than only against a mock. Seven defects were
-found this way and all seven are fixed:
+against the real service rather than only against a mock. Eight defects were
+found this way and all eight are fixed:
 
 * the multimodal message part was spelled the Anthropic way (`image`)
   instead of the OpenAI-compatible way (`image_url`), which some models
@@ -134,6 +134,14 @@ found this way and all seven are fixed:
   only the polling loop that followed it, so the latency in the tool reply,
   in the report and on the dashboard read **0.4 s**. The clock now starts
   before the submission.
+
+* a failed catalogue read was reported as an empty one. A rejected API key
+  produced "0 language models" and then, for every step of the plan, "no
+  model in the live catalogue satisfies coding" — each of which reads like a
+  fact about GMI Cloud rather than a fact about the request. The registry
+  had recorded the reason; nothing carried it forward. The error now reaches
+  every place that reports an empty catalogue, and both demo scripts stop
+  rather than run against a catalogue that was never fetched;
 
 Each has a regression test.
 
@@ -194,7 +202,7 @@ and say why. It never shows a number NEXUS did not measure.
   the only thing in the repository that needs a third-party package (Pillow),
   it is not in the plugin payload, and the plugin itself still imports nothing
   but the standard library.
-* The one-off scripts that found the seven defects live in `scripts/probes/`,
+* The one-off scripts that found seven of the eight defects live in `scripts/probes/`,
   outside the plugin, each documented in that directory's README.
 
 ## Checklist
