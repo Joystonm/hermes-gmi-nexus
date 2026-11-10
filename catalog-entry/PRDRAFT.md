@@ -7,7 +7,7 @@ ROUTE → EXECUTE → EVALUATE → RECOVER → LEARN → REPORT** — and report
 actually ran, what it cost and what failed.
 
 - **Repository:** https://github.com/Joystonm/hermes-gmi-nexus
-- **Pinned commit:** `c9a50c775012f20bcbd587d2874b0902edbed161`
+- **Pinned commit:** `b4c38f2e6c850ce295fa76265e3b68ed630f26ba`
 - **Subdirectory:** `plugins/gmi-nexus`
 - **Maintainer:** Joystonm
 - **Category:** `models` · **Tier:** `community` · **Requires Hermes:** `>=0.21.6`
@@ -101,7 +101,7 @@ Four levels, kept separate; see the plugin's
    opt-in behind `GMI_LIVE_TESTS=1`, and every live figure quoted anywhere
    in this repository is an **estimate priced at the catalogue's published
    rates** — GMI's usage block reports token counts and no dollar amount, so
-   no billed total is claimed. The whole live exercise cost about **$0.94**
+   no billed total is claimed. The whole live exercise cost **just under $1**
    of the project's $10 ceiling.
 4. **Hermes plugin** — `hermes plugins validate ./plugins/gmi-nexus
    --install-deps` passes with a `safe` security scan, and
@@ -185,9 +185,10 @@ and say why. It never shows a number NEXUS did not measure.
 * `scripts/demo_video.py` is the same plugin on the same real service in five
   phases — catalogue, generate, see, build, report — arranged so the whole
   thing finishes inside the ninety seconds the demo video is allowed. Three
-  measured runs came in at **69.3**, **53.4** and **76.0 seconds** — every one
-  of them inside the limit, and the spread between them is the request queue's,
-  not the plugin's. The time budget was measured
+  measured runs came in at **69.3**, **53.4**, **76.0** and **82.2 seconds** —
+  every one of them inside the limit, the last one on a cold probe cache where
+  the vision model is probed live, and the spread between them is the request
+  queue's, not the plugin's. The time budget was measured
   rather than guessed: `scripts/probes/probe_code_speed.py` measured the code
   models and `scripts/probes/probe_image_speed.py` measured the image models,
   and the video script expresses both results through the plugin's own
