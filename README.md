@@ -211,7 +211,7 @@ too small for a source file, a reported generation latency of 0.4
 seconds for a generation that had really taken half a minute, and a rejected
 API key that was reported as an empty catalogue rather than as a rejected
 key. All eight are fixed, and all eight have regression tests. The whole live
-exercise cost about **$0.87** of the project's $10 ceiling;
+exercise cost about **$0.94** of the project's $10 ceiling;
 [`BUILD_STATUS.md`](BUILD_STATUS.md) accounts for every figure.
 
 ### The short run, for recording
@@ -221,7 +221,8 @@ cannot be recorded uncut inside a ninety-second video. `scripts/demo_video.py`
 is the same plugin on the same real service in five phases — the catalogue, a
 generation, a vision inspection, an implementation through Hermes' tools, and
 the report — arranged so the whole thing finishes in time to record straight
-through. The measured run comes in at **69.3 seconds**.
+through. Measured runs come in at **53.4 and 76.0 seconds** — both inside the
+ninety-second limit a demo video is allowed.
 
 ```bash
 GMI_API_KEY=<key> python scripts/demo_video.py --approve-spend --home demo_output/video_home

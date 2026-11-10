@@ -345,6 +345,13 @@ The measured run, warm probe cache and all:
 | 5. Report | 0.0 s |
 | **Total** | **69.3 s** |
 
+Two further live runs of the same script, against the same service, came in
+at **53.4 s** and **76.0 s** — both inside the ninety seconds a demo video is
+allowed. Their generations took 19.0 s and 22.3 s, which is the time the
+caller actually waited and not the queue's own timing; that is the figure the
+latency fix above restored. The spread between the three runs is the request
+queue's, not the plugin's.
+
 Two changes were made because of the measurements rather than because of
 guesses. The generation asks for a JPEG instead of a PNG — the model
 publishes the option and the plugin passes it through — which is a tenth of
@@ -620,7 +627,7 @@ environment test no longer has to substitute a stub router.
 ### What the live exercise cost
 
 The project's GMI Cloud ceiling is **$10**. The live work so far has used
-roughly **$0.87** of it — about nine per cent:
+roughly **$0.94** of it — about nine per cent:
 
 | Activity | Estimated cost |
 | --- | --- |
@@ -632,6 +639,8 @@ roughly **$0.87** of it — about nine per cent:
 | Live demo run 6 — after the Dev Agent fix; the one recorded in `demo_output/live_run_3.txt` | $0.12827019 |
 | Video run 1 — the five-phase run, which took 348 seconds and showed where the time goes | $0.03269945 |
 | Video runs 2, 3 and 4 — the same five phases, after the probe cache and the code-model block | $0.11161785 |
+| Video run 5 — the first of the two recorded reels, at 53.4 seconds | $0.0322753 |
+| Video run 6 — the second recorded reel, at 76.0 seconds | $0.0327651 |
 | The live vision probe on a real image | $0.000341 |
 | Probing all 24 catalogue-declared vision models with the number challenge | ≈ $0.01 |
 | Assorted one-off probes (parameter variants, URL vs data URI, part type) | ≈ $0.01 |

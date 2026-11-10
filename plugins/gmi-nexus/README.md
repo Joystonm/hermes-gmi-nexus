@@ -30,7 +30,7 @@ seconds for a generation that had really taken half a minute, because the
 clock started after the queue had already done the work; and a rejected API
 key that was reported as an empty catalogue rather than as a rejected key.
 All eight are fixed and all eight have regression tests. The whole live
-exercise cost about **$0.87**.
+exercise cost about **$0.94**.
 
 [`docs/HERMES_VALIDATION.md`](docs/HERMES_VALIDATION.md) keeps four levels of
 verification apart — unit, mocked integration, live API, and a load inside a
