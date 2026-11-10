@@ -7,11 +7,11 @@ ROUTE → EXECUTE → EVALUATE → RECOVER → LEARN → REPORT** — and report
 actually ran, what it cost and what failed.
 
 - **Repository:** https://github.com/Joystonm/hermes-gmi-nexus
-- **Pinned commit:** `7a4015c17209063c901e3ca92801fc7eaf11f40f`
+- **Pinned commit:** `829fec1a816a7a7d36bdef8e73987688f5a3397c`
 - **Subdirectory:** `plugins/gmi-nexus`
 - **Maintainer:** Joystonm
 - **Category:** `models` · **Tier:** `community` · **Requires Hermes:** `>=0.21.6`
-- **Demo:** [`docs/demo/gmi-nexus-demo.mp4`](https://github.com/Joystonm/hermes-gmi-nexus/blob/7a4015c17209063c901e3ca92801fc7eaf11f40f/docs/demo/gmi-nexus-demo.mp4) — 70 seconds, one continuous live run, with narration. Every number in it came out of that run; nothing in it was drawn by hand.
+- **Demo:** [`docs/demo/gmi-nexus-demo.mp4`](https://github.com/Joystonm/hermes-gmi-nexus/blob/829fec1a816a7a7d36bdef8e73987688f5a3397c/docs/demo/gmi-nexus-demo.mp4) — 80 seconds, one continuous live run, with narration. Every number in it came out of that run; nothing in it was drawn by hand.
 
 ## What this plugin does
 
@@ -85,12 +85,12 @@ plugin's own README, which is the page the catalog renders.
 Four levels, kept separate; see the plugin's
 `docs/HERMES_VALIDATION.md` for the full report.
 
-1. **Unit** — 250 tests collected: **244 passed, 6 skipped** (the live ones),
+1. **Unit** — 274 tests collected: **268 passed, 6 skipped** (the live ones),
    all passing. No network, no cost. Under Hermes' own `web` pins the same
    suite was recorded at **230 passed, 5 skipped**, with the real `fastapi`
    router loaded. (That pinned figure was recorded before the suite grew by
-   the tests covering the generation-latency fix, the retired-model verdict
-   and the malformed-JSON repair.)
+   the tests covering the generation-latency fix, the retired-model verdict,
+   the malformed-JSON repair and the narration's claim check.)
 2. **Mock integration** — the real pipeline, router, executor, evaluator,
    storage, budget and dashboard API, with only the HTTP layer stubbed.
    `scripts/demo_run.py --dry-run` runs the whole scenario end to end this
@@ -227,11 +227,15 @@ and say why. It never shows a number NEXUS did not measure.
   RECOVER step doing its job, and the report says so rather than quietly
   agreeing with itself. The demo video shows it happening.
 * **The demo video is in the repository** — `docs/demo/gmi-nexus-demo.mp4`,
-  70.6 seconds, 1920×1080, narrated, cut from a single continuous live run.
+  80.4 seconds, 1920×1080, narrated, cut from a single continuous live run.
   The terminal on the left is that run's own transcript and the numbers on the
   right are read out of its JSON, so nothing in the video was drawn by hand.
   The narration was synthesised with Inworld TTS in **one request** for all
-  seven segments.
+  seven segments, and every claim the voice makes is checked against that
+  run's own JSON before the narration is synthesised and again before the
+  video is cut — so the voice cannot describe a run that did not happen.
+  Nothing in the picture sits still: over the finished file, 2410 of the
+  2411 frames are distinct.
 * The banner is drawn by `scripts/make_banner.py`, a development tool. It is
   the only thing in the repository that needs a third-party package (Pillow),
   it is not in the plugin payload, and the plugin itself still imports nothing
