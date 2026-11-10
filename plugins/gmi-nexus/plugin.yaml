@@ -1,0 +1,101 @@
+name: gmi-nexus
+version: 1.0.0
+description: >-
+  Adaptive intelligence layer for Hermes: task-aware model routing across the
+  live GMI Cloud catalogue, coordinated multimodal workflows (vision, image
+  generation and editing, video, audio), real benchmarking, and a measured
+  performance history that improves future routing decisions.
+author: GMI NEXUS contributors
+license: Apache-2.0
+homepage: https://github.com/Joystonm/hermes-gmi-nexus
+tags:
+  - models
+  - multimodal
+  - orchestration
+  - gmi
+requires_hermes: ">=0.21.6"
+manifest_version: 2
+api_version: 2
+provides_tools:
+  - nexus_models
+  - nexus_analyze
+  - nexus_run
+  - nexus_benchmark
+  - nexus_vision
+  - nexus_media
+  - nexus_dev
+  - nexus_report
+provides_hooks: []
+requires_env:
+  - name: GMI_API_KEY
+    description: >-
+      GMI Cloud API key. Hermes stores it in the profile's .env and NEXUS reads
+      it through Hermes' secret scope, so it is never written into the plugin
+      directory and never appears in a log line or a dashboard response.
+    url: "https://gmicloud.ai"
+    secret: true
+config_schema:
+  llm_base_url:
+    type: str
+    default: "https://api.gmi-serving.com/v1"
+    description: "OpenAI-compatible GMI Cloud inference base URL."
+  media_base_url:
+    type: str
+    default: "https://console.gmicloud.ai/api/v1/ie/requestqueue/apikey"
+    description: "GMI Cloud request-queue base URL used for image, video and audio generation."
+  mcp_server:
+    type: str
+    default: "gmi"
+    description: "Name of the configured Hermes MCP server for the GMI Cloud MCP server. Leave empty to disable the MCP path."
+  use_mcp:
+    type: bool
+    default: false
+    description: "Prefer the GMI MCP server for model discovery and generation when it is connected and allowlisted."
+  request_timeout_s:
+    type: int
+    default: 120
+    description: "Per-request timeout in seconds for GMI API calls."
+  max_retries:
+    type: int
+    default: 2
+    description: "Maximum retry attempts per step before the recovery policy switches model."
+  max_parallel:
+    type: int
+    default: 3
+    description: "Maximum number of independent steps executed concurrently."
+  max_cost_per_run_usd:
+    type: float
+    default: 1.0
+    description: "Estimated-cost ceiling for a single orchestrated run."
+  daily_budget_usd:
+    type: float
+    default: 5.0
+    description: "Rolling daily spend ceiling across all NEXUS activity."
+  approval_threshold_usd:
+    type: float
+    default: 0.25
+    description: "Estimated cost above which a generation request is refused unless explicitly approved."
+  code_max_tokens:
+    type: int
+    default: 8192
+    description: "Token budget for a call that has to return whole files. The inference client's default of 2048 tokens is enough for a sentence and not enough for a source file; a reply that runs out of budget is cut off mid-JSON."
+  preferred_models:
+    type: list
+    default: []
+    description: "Model ids preferred by the operator; earlier entries score higher."
+  blocked_models:
+    type: list
+    default: []
+    description: "Model ids NEXUS must never route to."
+  verify_vision_capability:
+    type: bool
+    default: true
+    description: "Probe a model with a tiny image before trusting it for vision tasks."
+  enable_learning:
+    type: bool
+    default: true
+    description: "Update routing statistics from verified execution outcomes."
+  retention_days:
+    type: int
+    default: 30
+    description: "Days of execution history to keep before pruning."

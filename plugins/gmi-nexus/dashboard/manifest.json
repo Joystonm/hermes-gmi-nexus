@@ -1,0 +1,14 @@
+{
+  "name": "gmi-nexus",
+  "label": "GMI NEXUS",
+  "description": "Adaptive intelligence over the live GMI Cloud catalogue: model routing, arena benchmarks, execution history and multimodal workflows.",
+  "icon": "Activity",
+  "version": "1.0.0",
+  "tab": {
+    "path": "/nexus",
+    "position": "end"
+  },
+  "entry": "dist/index.js",
+  "css": "dist/style.css",
+  "api": "plugin_api.py"
+}

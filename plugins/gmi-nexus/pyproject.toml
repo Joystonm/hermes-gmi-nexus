@@ -1,0 +1,13 @@
+[project]
+name = "gmi-nexus"
+version = "1.0.0"
+description = "Adaptive intelligence layer for Hermes Agent over the GMI Cloud model catalogue."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+# No dependencies, deliberately. NEXUS imports only the standard library, so
+# there is nothing to consent to, nothing to install and nothing to break on
+# a future Hermes release. This table declares exactly that: an empty list,
+# no build system, no extras and no dependency groups, so PM reads it as
+# "installs nothing" and the plugin never triggers a dependency question.
+dependencies = []

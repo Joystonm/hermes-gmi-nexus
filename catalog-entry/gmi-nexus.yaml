@@ -1,0 +1,77 @@
+# GMI NEXUS — catalog entry for the Hermes plugin catalog.
+#
+# This file is PREPARED, not final. `SHA`, `REPLACE-ME` and `OWNER` below are
+# placeholders: admission rule 2 requires an exact 40-character commit SHA, and
+# no such SHA exists until the repository is committed and pushed.
+#
+# To finalise it:
+#
+#   1. Commit and push the repository, and make it public.
+#   2. Read the commit SHA of the pushed commit:
+#          git rev-parse HEAD
+#      It must be 40 lowercase hex characters. A branch, a tag or a short
+#      SHA is rejected by the loader.
+#   3. Replace every `SHA` in this file with that SHA, `REPLACE-ME` with the
+#      repository owner, and `OWNER` with the same owner. One pass over the
+#      file is enough — the pin appears in `sha:`, in `docs_url`, in `image:`
+#      and in every `screenshots:` URL, and they must all be the same commit
+#      or the pictures will not match the code they describe.
+#   4. Open a pull request against NousResearch/hermes-agent that adds this
+#      file under plugin-catalog/. Do not edit an existing entry's SHA to
+#      update the plugin — rule 4 requires a new PR for every SHA bump.
+#
+# The `docs_url` must point at the README *at the pinned commit*, and the
+# `subdir` must match the directory the plugin lives in.
+
+name: gmi-nexus
+repo: https://github.com/OWNER/hermes-gmi-nexus
+sha: SHA
+subdir: plugins/gmi-nexus
+title: GMI NEXUS
+description: >-
+  Adaptive intelligence layer for Hermes Agent over the live GMI Cloud model
+  catalogue. A goal is understood, planned into steps, and each step is routed
+  to the model that suits it from the catalogue read live at runtime, so a
+  retired model stops being routable and a new one becomes routable without a
+  code change. Results are evaluated against each step's own criteria, a
+  failure is recovered on a different model with bounded retries, the verified
+  outcome feeds the routing statistics, and the report says what ran, what it
+  cost and what failed. Ships a vision module for screenshots and before/after
+  comparison, a benchmarking arena whose results feed the router, a Dev Agent
+  that writes and tests code through Hermes' own tools, and a creative engine
+  for image, video and audio generation and editing. Also ships a web
+  dashboard tab. No third-party dependencies; the key is read through Hermes'
+  secret scope; a per-run ceiling, a rolling daily ceiling and an approval
+  threshold are enforced before any request is submitted.
+maintainer: REPLACE-ME
+tier: community
+category: models
+requires_hermes: ">=0.21.6"
+docs_url: https://github.com/OWNER/hermes-gmi-nexus/blob/SHA/plugins/gmi-nexus/README.md
+version: "1.0.0"
+image: https://raw.githubusercontent.com/OWNER/hermes-gmi-nexus/SHA/docs/banner.png
+screenshots:
+  - https://raw.githubusercontent.com/OWNER/hermes-gmi-nexus/SHA/docs/screenshots/nexus-01-overview.png
+  - https://raw.githubusercontent.com/OWNER/hermes-gmi-nexus/SHA/docs/screenshots/nexus-02-model-intelligence.png
+  - https://raw.githubusercontent.com/OWNER/hermes-gmi-nexus/SHA/docs/screenshots/nexus-03-arena.png
+  - https://raw.githubusercontent.com/OWNER/hermes-gmi-nexus/SHA/docs/screenshots/nexus-04-execution.png
+  - https://raw.githubusercontent.com/OWNER/hermes-gmi-nexus/SHA/docs/screenshots/nexus-05-multimodal.png
+  - https://raw.githubusercontent.com/OWNER/hermes-gmi-nexus/SHA/docs/screenshots/nexus-06-settings.png
+readme: true
+known_issues:
+  - The dashboard tab needs Hermes' web extra: pip install "hermes-agent[web]".
+  - Needs a GMI Cloud account and API key. Catalogue reads are free, but inference and generation are billed by GMI Cloud at the model's published rate.
+capabilities:
+  provides_tools:
+    - nexus_models
+    - nexus_analyze
+    - nexus_run
+    - nexus_benchmark
+    - nexus_vision
+    - nexus_media
+    - nexus_dev
+    - nexus_report
+  provides_hooks: []
+  provides_middleware: []
+  requires_env:
+    - GMI_API_KEY

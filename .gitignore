@@ -1,0 +1,48 @@
+# Bytecode — Hermes' plugin guard flags a committed .pyc as a finding, and
+# compiled files never belong in the repository.
+__pycache__/
+*.py[cod]
+*.so
+
+# Test and tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Packaging artefacts
+build/
+dist/
+*.egg-info/
+
+# Local environments
+.venv/
+venv/
+.env
+.env.*
+!.env.example
+
+# The pinned dashboard environment: Hermes' four web pins, installed into a
+# virtual environment so the plugin can be verified against the versions
+# Hermes actually runs with. It is a local tool, never part of the repository.
+.hermes-web/
+
+# The demo's own output — the transcript of the last run.
+demo_output/
+
+# Editors and operating systems
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Runtime state. NEXUS keeps its history in Hermes' plugin-data directory,
+# but if a local run ever writes one into the plugin folder, it must not be
+# committed.
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3

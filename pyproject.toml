@@ -1,0 +1,23 @@
+[project]
+name = "gmi-nexus-workspace"
+version = "1.0.0"
+description = "Development workspace for GMI NEXUS, the Hermes Agent plugin in plugins/gmi-nexus."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4,<10",
+]
+
+[tool.pytest.ini_options]
+# The plugin itself lives in plugins/gmi-nexus; its package is importable
+# from there so the tests exercise the shipped code, not a copy.
+testpaths = ["tests"]
+pythonpath = ["plugins/gmi-nexus"]
+addopts = "-q"
+markers = [
+    "live: talks to the real GMI Cloud API; skipped unless GMI_LIVE_TESTS=1 and a credential is present",
+]
