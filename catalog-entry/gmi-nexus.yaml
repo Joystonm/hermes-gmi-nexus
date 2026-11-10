@@ -1,31 +1,30 @@
 # GMI NEXUS — catalog entry for the Hermes plugin catalog.
 #
-# This file is PREPARED, not final. `SHA`, `REPLACE-ME` and `OWNER` below are
-# placeholders: admission rule 2 requires an exact 40-character commit SHA, and
-# no such SHA exists until the repository is committed and pushed.
+# This is the file the pull request adds. It is added to
+# NousResearch/hermes-agent under plugin-catalog/gmi-nexus.yaml.
 #
-# To finalise it:
+# It pins commit 2f7f79350ac894c77a3db2cb8dd56b714d4b964a of
+# https://github.com/Joystonm/hermes-gmi-nexus
+# and installs the plugin from the plugins/gmi-nexus subdirectory of that
+# commit. The images are pinned to the same commit, so the card can never
+# show a picture of a different version than the code it describes.
 #
-#   1. Commit and push the repository, and make it public.
-#   2. Read the commit SHA of the pushed commit:
-#          git rev-parse HEAD
-#      It must be 40 lowercase hex characters. A branch, a tag or a short
-#      SHA is rejected by the loader.
-#   3. Replace every `SHA` in this file with that SHA, `REPLACE-ME` with the
-#      repository owner, and `OWNER` with the same owner. One pass over the
-#      file is enough — the pin appears in `sha:`, in `docs_url`, in `image:`
-#      and in every `screenshots:` URL, and they must all be the same commit
-#      or the pictures will not match the code they describe.
-#   4. Open a pull request against NousResearch/hermes-agent that adds this
-#      file under plugin-catalog/. Do not edit an existing entry's SHA to
-#      update the plugin — rule 4 requires a new PR for every SHA bump.
+# The pin appears in four places — `sha:`, `docs_url`, `image:` and every
+# `screenshots:` URL — and all of them must be the same commit. Admission
+# rule 2 requires an exact 40-character lowercase SHA: a branch, a tag or a
+# short SHA is rejected by the loader.
+#
+# If the repository is pushed again after this commit, this file has to be
+# re-pinned to the new SHA and submitted as a new pull request. Admission
+# rule 4 requires a new PR for every SHA bump; editing an existing entry's
+# SHA in place is not how an update is made.
 #
 # The `docs_url` must point at the README *at the pinned commit*, and the
 # `subdir` must match the directory the plugin lives in.
 
 name: gmi-nexus
-repo: https://github.com/OWNER/hermes-gmi-nexus
-sha: SHA
+repo: https://github.com/Joystonm/hermes-gmi-nexus
+sha: 2f7f79350ac894c77a3db2cb8dd56b714d4b964a
 subdir: plugins/gmi-nexus
 title: GMI NEXUS
 description: >-
@@ -43,20 +42,20 @@ description: >-
   dashboard tab. No third-party dependencies; the key is read through Hermes'
   secret scope; a per-run ceiling, a rolling daily ceiling and an approval
   threshold are enforced before any request is submitted.
-maintainer: REPLACE-ME
+maintainer: Joystonm
 tier: community
 category: models
 requires_hermes: ">=0.21.6"
-docs_url: https://github.com/OWNER/hermes-gmi-nexus/blob/SHA/plugins/gmi-nexus/README.md
+docs_url: https://github.com/Joystonm/hermes-gmi-nexus/blob/2f7f79350ac894c77a3db2cb8dd56b714d4b964a/plugins/gmi-nexus/README.md
 version: "1.0.0"
-image: https://raw.githubusercontent.com/OWNER/hermes-gmi-nexus/SHA/docs/banner.png
+image: https://raw.githubusercontent.com/Joystonm/hermes-gmi-nexus/2f7f79350ac894c77a3db2cb8dd56b714d4b964a/docs/banner.png
 screenshots:
-  - https://raw.githubusercontent.com/OWNER/hermes-gmi-nexus/SHA/docs/screenshots/nexus-01-overview.png
-  - https://raw.githubusercontent.com/OWNER/hermes-gmi-nexus/SHA/docs/screenshots/nexus-02-model-intelligence.png
-  - https://raw.githubusercontent.com/OWNER/hermes-gmi-nexus/SHA/docs/screenshots/nexus-03-arena.png
-  - https://raw.githubusercontent.com/OWNER/hermes-gmi-nexus/SHA/docs/screenshots/nexus-04-execution.png
-  - https://raw.githubusercontent.com/OWNER/hermes-gmi-nexus/SHA/docs/screenshots/nexus-05-multimodal.png
-  - https://raw.githubusercontent.com/OWNER/hermes-gmi-nexus/SHA/docs/screenshots/nexus-06-settings.png
+  - https://raw.githubusercontent.com/Joystonm/hermes-gmi-nexus/2f7f79350ac894c77a3db2cb8dd56b714d4b964a/docs/screenshots/nexus-01-overview.png
+  - https://raw.githubusercontent.com/Joystonm/hermes-gmi-nexus/2f7f79350ac894c77a3db2cb8dd56b714d4b964a/docs/screenshots/nexus-02-model-intelligence.png
+  - https://raw.githubusercontent.com/Joystonm/hermes-gmi-nexus/2f7f79350ac894c77a3db2cb8dd56b714d4b964a/docs/screenshots/nexus-03-arena.png
+  - https://raw.githubusercontent.com/Joystonm/hermes-gmi-nexus/2f7f79350ac894c77a3db2cb8dd56b714d4b964a/docs/screenshots/nexus-04-execution.png
+  - https://raw.githubusercontent.com/Joystonm/hermes-gmi-nexus/2f7f79350ac894c77a3db2cb8dd56b714d4b964a/docs/screenshots/nexus-05-multimodal.png
+  - https://raw.githubusercontent.com/Joystonm/hermes-gmi-nexus/2f7f79350ac894c77a3db2cb8dd56b714d4b964a/docs/screenshots/nexus-06-settings.png
 readme: true
 known_issues:
   - The dashboard tab needs Hermes' web extra: pip install "hermes-agent[web]".
