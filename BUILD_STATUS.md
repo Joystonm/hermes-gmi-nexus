@@ -6,7 +6,7 @@ Hermes Agent over the GMI Cloud model catalogue.
 Hermes install, and **exercised live against GMI Cloud** — real inference, real
 vision, real image generation, and real code written and tested through
 Hermes' own tools.
-**Remaining work:** demo recording, repository publication and the catalog PR.
+**Remaining work:** repository publication, the catalog pull request, and posting the demo to X and filing the form.
 
 ---
 
@@ -581,15 +581,16 @@ commit.
 
 ```
 $ python -m pytest tests/
-244 passed, 6 skipped in 9.36s
+244 passed, 6 skipped in 13.80s
 ```
 
 On an interpreter carrying Hermes' own `web` pins the same suite was **230
 passed, 5 skipped** — the sixth skip is the environment test that reports the
 `fastapi`/`starlette` mismatch, and it passes once the versions agree. The pins
 are installed into a virtual environment, so the system interpreter is never
-modified. That pinned run was recorded before the suite grew by the one test
-that covers the latency fix below, so the pinned figures are one behind.
+modified. That pinned run was recorded before the suite grew by the fourteen
+resilience tests, so the pinned figures are behind; they are quoted as they
+were measured rather than restated as current.
 
 The 5 skipped tests are the live API tests, skipped because `GMI_LIVE_TESTS`
 is not set. That is their intended behaviour.

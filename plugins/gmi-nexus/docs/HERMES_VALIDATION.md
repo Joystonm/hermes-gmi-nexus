@@ -19,15 +19,17 @@ document says so.
 
 ## Level 1 — unit tests
 
-**230 tests, 6 skipped. All passing.**
+**250 tests collected, 6 skipped, 244 passed. All passing.**
 
 ```
 $ python -m pytest tests/
-230 passed, 6 skipped in 13.88s
+244 passed, 6 skipped in 13.80s
 ```
 
-On an interpreter carrying Hermes' own `web` pins the same suite is **230
-passed, 5 skipped** — see *The environment the tests run in* below.
+On an interpreter carrying Hermes' own `web` pins the same suite was last
+recorded at **230 passed, 5 skipped** — that run predates the tests for the
+generation-latency fix, the retired-model verdict and the malformed-JSON
+repair. See *The environment the tests run in* below.
 
 Each test file covers one module:
 
@@ -40,10 +42,11 @@ Each test file covers one module:
 | `test_arena.py` | 15 | Identical test cases across models, the dimensions, the reports. |
 | `test_storage.py` | 22 | The SQLite schema, the aggregation queries, the history's ordering. |
 | `test_vision.py` | 32 | Screenshot analysis, defect lists, before/after comparison, the drawn-number probe, refusals, and the inlining of remote images. |
-| `test_creative.py` | 20 | Generation, editing, masked editing, and the per-model parameter schemas. |
+| `test_creative.py` | 21 | Generation, editing, masked editing, and the per-model parameter schemas. |
 | `test_dev.py` | 22 | The Dev Agent's analyse → generate → write → test → fix loop, through Hermes' own tools — including that the fix prompt carries the original task, that a call is given room to write a whole file, and that the budget gate is consulted before the money is spent. |
 | `test_plugin.py` | 24 | The registration contract: the eight tools, their schemas, the command, the credential handling. |
 | `test_dashboard.py` | 18 | The dashboard's six routes, their payloads and their empty states. |
+| `test_resilience.py` | 14 | What the live runs taught the plugin to survive: the provider's real reason read out of a nested error, a retired model remembered and excluded from the candidates, a code reply whose newlines were written literally, and the retry that shows the model the reply which failed. |
 | `test_live.py` | 5 | **Level 3.** Skipped unless explicitly opted in. |
 
 The **5 skipped** tests are all in `test_live.py` — they are skipped because
@@ -65,6 +68,9 @@ $ python -m pytest tests/          # fastapi 0.133.1, starlette 1.9.0
 230 passed, 5 skipped in 12.81s
 ```
 
+That run was recorded before the suite grew by the fourteen resilience tests,
+so it is quoted as it was measured rather than restated as a current figure.
+
 Under those pins the plugin's real `dashboard/plugin_api.py` was loaded
 against a genuine `fastapi.routing.APIRouter`, and it registered exactly the
 six documented routes with every handler `async def` — which is what Hermes'
@@ -78,7 +84,7 @@ for how the environment is created.
 
 ## Level 2 — mock integration
 
-Included in the 199 above; this level describes *which* of them are
+Included in the 244 above; this level describes *which* of them are
 integration-shaped rather than unit-shaped.
 
 The provider is stubbed at the HTTP layer (`nexus.http.HttpResponse`), never
@@ -155,8 +161,8 @@ of every live call is computed from the catalogue's published rates. These
 are **estimates at list price**, not bills, and they are labelled as such
 everywhere they appear.
 
-The live exercise found eight defects that the mocked suite could not, and
-all eight are fixed:
+The live exercise found ten defects that the mocked suite could not, and
+all ten are fixed:
 
 1. **The multimodal part type was spelled the wrong way.** The vision path
    sent `{"type": "image"}` — the Anthropic spelling. GMI's endpoint is
@@ -226,13 +232,42 @@ all eight are fixed:
    This one was not found by a probe — it was found by a live run with a
    credential that had been rotated out from under the plugin.
 
+9. **A model the provider had retired was still routable, and the
+   provider's own reason was swallowed.** GMI Cloud publishes the catalogue
+   and the models it can actually serve separately, so a deprecated model
+   keeps its place in the catalogue. The router chose
+   `Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8`, called it, and was refused
+   with a generic *"Backend request failed with status 400"* — while the
+   actual reason, *"The requested model has been deprecated and is no longer
+   available."*, sat one level down in `error.details` and never reached the
+   caller. NEXUS now reads the provider's own reason out of the error,
+   reports it verbatim instead of a generic failure, and **remembers the
+   verdict**: a model the provider has retired is not routed to again, and
+   the work recovers on a different one. The demo video shows this
+   happening.
+
+10. **A code reply that was right but malformed was thrown away.** The Dev
+    Agent asks for a file list as JSON. The model's answer was correct, but
+    it wrote the newlines inside its JSON string literally, so the parser
+    rejected it as unparseable — and the retry prompt did not show the model
+    the reply that had failed, so it repeated the same malformed answer.
+    The parser now repairs raw newlines inside JSON string literals instead
+    of discarding good work, and the retry carries the model's own unusable
+    reply, the exact shape it must use, and the rule that a newline inside a
+    string is written as `\n`.
+
+    The last two have **fourteen regression tests** between them, in
+    `tests/test_resilience.py`.
+
 The live run also showed that the catalogue's own code model,
 `Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8`, answers **every** request with
 *"Backend request failed with status 400"* under every parameter variant.
-That is the provider's problem, not NEXUS's — but it is exactly what the
-RECOVER step exists for, and the Dev Agent now passes over a model that
-fails and reports which model actually ran. The demo's RECOVER section
-reconciles the published route against the executed one out loud.
+The provider's real reason for that is item 9: the model has been
+deprecated. The plugin now says so in those words rather than passing a
+generic failure on, and the work moves to a model that is still served. That
+is exactly what the RECOVER step exists for, and the Dev Agent reports which
+model actually ran. The demo's RECOVER section reconciles the published
+route against the executed one out loud.
 
 ---
 

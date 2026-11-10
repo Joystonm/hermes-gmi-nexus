@@ -17,6 +17,25 @@ routable without a code change.
 
 ---
 
+## The demo
+
+![A frame from the demo: the live transcript on the left, the generated image and the landing page on the right](docs/demo/gmi-nexus-demo-poster.jpg)
+
+**[Watch the 70-second demo](docs/demo/gmi-nexus-demo.mp4)** — 1920×1080, with
+narration, inside the ninety seconds the brief allows.
+
+It is a **single continuous take**: no cuts, no re-recordings, no
+reconstructions. The run behind it took **68.6 seconds**, and the video is
+**70.6**. The terminal on the left is that run's own transcript, the numbers
+on the right are read out of the run's JSON, the image is the asset GMI
+generated during that run, and the landing page is the file the Dev Agent
+wrote and tested during that run — including the RECOVER, where a model the
+provider had retired is refused and the work moves to a different one.
+
+Every number in it was measured by that run. Nothing in it was drawn by hand.
+
+---
+
 ## Repository layout
 
 This repository holds the plugin and the tooling that develops it. They are
@@ -35,7 +54,7 @@ plugin **directory**, so development tooling must not travel inside it.
 | [`scripts/demo_video.py`](scripts/demo_video.py) | The short live run the demo video records — five phases, under ninety seconds. |
 | [`scripts/validate_installation.py`](scripts/validate_installation.py) | Loads the plugin the way Hermes loads it and proves the contract holds. |
 | [`scripts/make_banner.py`](scripts/make_banner.py) | Draws the banner. A development tool — it needs Pillow, which the plugin itself does not. |
-| [`scripts/probes/`](scripts/probes/) | The one-off scripts that found seven of the eight defects the mocked tests could not. Not part of the plugin; each one is documented in [its README](scripts/probes/README.md). |
+| [`scripts/probes/`](scripts/probes/) | The one-off scripts that found seven of the ten defects the mocked tests could not. Not part of the plugin; each one is documented in [its README](scripts/probes/README.md). |
 | [`BUILD_STATUS.md`](BUILD_STATUS.md) | What is done, what is not, and what was tested. |
 
 ---
@@ -204,14 +223,16 @@ and `--approve-spend`, it prints what it is about to spend before it spends
 it, and it does not raise the plugin's own limits.
 
 It has been run end to end against the real service, six times. That is how
-eight defects surfaced which the mocked tests could not find — among them a
+ten defects surfaced which the mocked tests could not find — among them a
 catalogue model that answered `"456"` for a number it had never seen, a code
 model whose replies came back cut off mid-JSON because the token budget was
 too small for a source file, a reported generation latency of 0.4
-seconds for a generation that had really taken half a minute, and a rejected
+seconds for a generation that had really taken half a minute, a rejected
 API key that was reported as an empty catalogue rather than as a rejected
-key. All eight are fixed, and all eight have regression tests. The whole live
-exercise cost **just under $1** of the project's $10 ceiling;
+key, and a model the provider had already retired that the router kept
+choosing because the provider's real reason was swallowed. All ten are fixed,
+and all ten have regression tests. The whole live exercise cost **just over
+$1** of the project's $10 ceiling;
 [`BUILD_STATUS.md`](BUILD_STATUS.md) accounts for every figure.
 
 ### The short run, for recording
@@ -224,6 +245,11 @@ the report — arranged so the whole thing finishes in time to record straight
 through. Measured runs come in at **53.4, 76.0 and 82.2 seconds** — the last
 one on a cold probe cache, where the vision model is probed live — and every
 one of them is inside the ninety-second limit a demo video is allowed.
+
+**It has been recorded.** The cut is at
+[`docs/demo/gmi-nexus-demo.mp4`](docs/demo/gmi-nexus-demo.mp4) — 70.6 seconds,
+1920×1080, narrated, with every number on screen read out of the run that
+produced it.
 
 ```bash
 GMI_API_KEY=<key> python scripts/demo_video.py --approve-spend --home demo_output/video_home
@@ -257,11 +283,14 @@ exercises the real router instead:
 ```bash
 python -m venv .venv && .venv/Scripts/python -m pip install \
     "fastapi==0.133.1" "uvicorn==0.54.0" "starlette==1.9.0" "python-multipart==0.0.32" pytest
-.venv/Scripts/python -m pytest tests/       # 229 passed, 5 skipped
+.venv/Scripts/python -m pytest tests/       # 230 passed, 5 skipped
 ```
 
 That run was last recorded at 230 passed and 5 skipped, before the suite grew
-by the test that covers the generation-latency fix.
+by the tests for the generation-latency fix, the retired-model verdict and the
+malformed-JSON repair. On the system interpreter the same suite is now **244
+passed, 6 skipped**; under these pins the sixth skip does not happen, because
+the real `fastapi` router loads.
 
 That changes nothing about the machine you run it on — the pins live in the
 virtual environment and shadow whatever the system interpreter has. If you

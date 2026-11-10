@@ -85,11 +85,12 @@ plugin's own README, which is the page the catalog renders.
 Four levels, kept separate; see the plugin's
 `docs/HERMES_VALIDATION.md` for the full report.
 
-1. **Unit** — 244 tests, 6 skipped (the live ones), all passing. No network,
-   no cost. Under Hermes' own `web` pins the same suite is **229 passed,
-   5 skipped**, with the real `fastapi` router loaded. (That pinned figure was
-   recorded before the suite grew by the tests covering the generation-latency
-   fix, the retired-model verdict and the malformed-JSON repair.)
+1. **Unit** — 250 tests collected: **244 passed, 6 skipped** (the live ones),
+   all passing. No network, no cost. Under Hermes' own `web` pins the same
+   suite was recorded at **230 passed, 5 skipped**, with the real `fastapi`
+   router loaded. (That pinned figure was recorded before the suite grew by
+   the tests covering the generation-latency fix, the retired-model verdict
+   and the malformed-JSON repair.)
 2. **Mock integration** — the real pipeline, router, executor, evaluator,
    storage, budget and dashboard API, with only the HTTP layer stubbed.
    `scripts/demo_run.py --dry-run` runs the whole scenario end to end this
@@ -221,10 +222,16 @@ and say why. It never shows a number NEXUS did not measure.
   caller actually waited, which is the figure the latency fix restored.
 * The live run's RECOVER section **reconciles the published route against
   the route that was actually taken**, out loud. On the live catalogue the
-  published code model answers every request with a 400, so the model that
-  ran is not the model that was published. That is the RECOVER step doing
-  its job, and the report says so rather than quietly agreeing with
-  itself.
+  published code model has been **retired by the provider**, so it is refused
+  and the model that ran is not the model that was published. That is the
+  RECOVER step doing its job, and the report says so rather than quietly
+  agreeing with itself. The demo video shows it happening.
+* **The demo video is in the repository** — `docs/demo/gmi-nexus-demo.mp4`,
+  70.6 seconds, 1920×1080, narrated, cut from a single continuous live run.
+  The terminal on the left is that run's own transcript and the numbers on the
+  right are read out of its JSON, so nothing in the video was drawn by hand.
+  The narration was synthesised with Inworld TTS in **one request** for all
+  seven segments.
 * The banner is drawn by `scripts/make_banner.py`, a development tool. It is
   the only thing in the repository that needs a third-party package (Pillow),
   it is not in the plugin payload, and the plugin itself still imports nothing
