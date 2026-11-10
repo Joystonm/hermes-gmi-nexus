@@ -243,6 +243,115 @@ that fails, and the report says which model actually ran — which is not the
 one the ROUTE phase published. The demo's RECOVER section reconciles the two
 out loud rather than quietly agreeing with itself.
 
+### The demo video, and what measuring it cost
+
+The hackathon asks for a demo **under 90 seconds**. The full nine-phase
+scenario takes about four minutes against the real service, so it cannot be
+recorded uncut. `scripts/demo_video.py` is a second script that runs the same
+plugin on the same real service in five phases — the catalogue, a generation,
+a vision inspection, an implementation through Hermes' tools, and the report —
+so the video can be one continuous recording with nothing edited out of it.
+
+The first attempt at that script **took 348 seconds**, and the reason was not
+the plugin. Measuring where the time went showed two things the mocked tests
+could never have shown, because both are about *time*:
+
+| Phase | Time | What it was actually doing |
+| --- | --- | --- |
+| The catalogue | 13.6 s | Reading the live catalogue. Free, and unavoidable — it is the point of the phase. |
+| The generation | 23.4 s | One real image generation. |
+| The vision call | 101.1 s | Of which the model's answer was **8.3 s**. The other ~93 s was the **capability probe**: the router's top candidates were each probed, one after another, until one turned out to be able to see. |
+| The implementation | 210.0 s | One code model writing an 11,110-byte HTML file. |
+
+Both findings became design decisions rather than workarounds.
+
+**The probe is cached, and that is the plugin's own behaviour.** A probe is a
+real request, and its verdict is the only evidence that a declared capability
+is true. The plugin records the verdict in its own persistent data directory
+and re-applies it to every later catalogue read, precisely so that the same
+question is not paid for twice. The video script takes a `--home`, and
+running it twice against the same home means the second run starts with the
+verdicts already in place. Nothing was cut out of the recording; the probe
+was simply not repeated.
+
+**Speed is not in the catalogue.** The catalogue publishes each model's
+prices and context length. It does not publish how fast the model writes, and
+that turned out to be the single number that decides whether a page fits in
+a video's time budget. `scripts/probes/probe_code_speed.py` gives every
+code-capable model the same writing task and measures the answer:
+
+| Model | Time | Written | Rate |
+| --- | --- | --- | --- |
+| `moonshotai/kimi-k2.7-code-highspeed` | 11.9 s | 2,415 chars | **203.8 chars/s** |
+| `moonshotai/kimi-k2.7-code` | 41.9 s | 2,000 chars | 47.7 chars/s |
+| `Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8` | — | — | answers every request with a 400 |
+
+The two working models differ by a factor of four, which on the same file is
+the difference between a minute and a quarter. The video script expresses
+that through the plugin's own documented `blocked_models` setting, so the
+operator's choice is what the router honours — and if the blocked model is
+ever retired the block stops matching anything and the router falls back to
+the catalogue on its own. The script degrades; it does not break.
+
+#### The image generation, measured
+
+The generation is the phase the video cannot do without, and the catalogue
+publishes nothing about how long it takes. `scripts/probes/probe_image_speed.py`
+sent one real generation to each configuration and timed it:
+
+| Model and options | Time | Result |
+| --- | --- | --- |
+| `gpt-image-2.5-flare-generate`, quality `medium` | 17.1 s | success |
+| `gpt-image-2.5-flare-generate`, quality `low` | 18.2 s | success |
+| `Qwen-Image-2512`, 8 steps | — | sat in `queued` for 240 s and never started |
+| `Flux2-Klein`, 4 steps | — | sat in `queued` for 240 s and never started |
+
+Two things follow. The cheapest models in the catalogue are not the usable
+ones: they waited in the queue and were never dispatched. And the quality
+tier makes no measurable difference to the wait, so the reel asks for the
+model's own default.
+
+Across seven real generations in this project the time was **14.5 s, 17.1 s,
+17.9 s, 19.3 s, 20.3 s, 21.3 s and one 109.7 s outlier** — a single occasion
+when the queue held the request for a minute and a half. Six of seven sit
+under twenty-two seconds; the outlier is the reason the script prints the
+total and says plainly whether it came in under ninety seconds.
+
+#### A real defect the timing exposed
+
+The reel's own output made the problem visible: it reported the generation
+as having taken **0.4 s** when the phase it was in had taken 24 s. The
+request queue's create call blocks while the request is admitted and
+processed, and the plugin was timing only the polling loop that follows it.
+So the latency NEXUS recorded and reported — in the tool reply, in
+`nexus_report` and on the dashboard — was a fraction of a second for a
+generation that took half a minute.
+
+The clock now starts before the submission rather than after it, so the
+number the report gives is the time the caller actually waited. There is a
+regression test for it, and the mock transport gained a `submit_delay` so a
+test can reproduce the queue's behaviour rather than assume it.
+
+#### The reel as it stands
+
+The measured run, warm probe cache and all:
+
+| Phase | Time |
+| --- | --- |
+| 1. The catalogue is live | 14.7 s |
+| 2. Generate | 24.2 s |
+| 3. See | 12.6 s |
+| 4. Build | 17.8 s |
+| 5. Report | 0.0 s |
+| **Total** | **69.3 s** |
+
+Two changes were made because of the measurements rather than because of
+guesses. The generation asks for a JPEG instead of a PNG — the model
+publishes the option and the plugin passes it through — which is a tenth of
+the bytes to move into the vision model. And the reel stops at the vision
+phase if the generation produced no image at all, rather than carrying an
+empty step forward as though it had worked.
+
 ### Documentation
 
 | Document | Covers |
@@ -326,14 +435,15 @@ commit.
 
 ```
 $ python -m pytest tests/
-227 passed, 6 skipped in 12.17s
+228 passed, 6 skipped in 13.79s
 ```
 
-On an interpreter carrying Hermes' own `web` pins the same suite is **228
+On an interpreter carrying Hermes' own `web` pins the same suite was **228
 passed, 5 skipped** — the sixth skip is the environment test that reports the
 `fastapi`/`starlette` mismatch, and it passes once the versions agree. The pins
 are installed into a virtual environment, so the system interpreter is never
-modified.
+modified. That pinned run was recorded before the suite grew by the one test
+that covers the latency fix below, so the pinned figures are one behind.
 
 The 5 skipped tests are the live API tests, skipped because `GMI_LIVE_TESTS`
 is not set. That is their intended behaviour.
@@ -397,18 +507,18 @@ for what each check proves.
 
 ## Known issues
 
-1. **The demo has not been recorded.** `scripts/demo_run.py` runs the
-   scenario in the brief as one continuous scripted run — analyse, break down,
-   select models, generate visual assets, implement through Hermes' tools,
-   inspect with a vision model, detect issues, correct, verify, display the
-   report — and it completes end to end in `--live` mode against GMI Cloud.
-   The **video** has not been produced. The hackathon asks for under 90
-   seconds, so the recording has to be the live run, cut to the moments that
-   show the plugin working.
+1. **The demo video has not been recorded yet.** The script that records it
+   is written and measured — `scripts/demo_video.py` runs the same plugin on
+   the same real service in five phases and finishes inside the time limit —
+   but recording it, and posting it, is the last step and needs a human with
+   a screen recorder.
 
-2. **The repository is not yet a git repository.** The `.gitignore` is
-   written and the layout is final, but nothing has been committed, so no
-   commit SHA exists yet and the catalog entry cannot be pinned.
+2. **The repository is committed but not published.** The tree is a git
+   repository with the whole plugin on one commit
+   (`260f9f47782643e60502a44f698151a70ede7c88`), and the catalog entry has
+   been prepared against that SHA. Nothing has been pushed: publishing a
+   repository and opening a pull request against someone else's project are
+   outward-facing actions, and they need an explicit go-ahead.
 
 3. **`hermes plugins validate --install-deps` prints a dependency-preparation
    error.** It reads:
@@ -464,16 +574,16 @@ environment test no longer has to substitute a stub router.
 | --- | --- | --- | --- |
 | 1 | Run one live inference and one live generation, within the $10 ceiling | — | **Done** — inference, vision and three image generations, all live |
 | 2 | Run `scripts/demo_run.py --live` end to end | — | **Done** — the ninth phase completed; the transcript is `demo_output/live_run_3.txt` |
-| 3 | Record the demo video, under 90 seconds | 2 | **High** — the demo video |
-| 4 | `git init`, commit, and publish the repository | Approval to publish | **High** |
-| 5 | Open the catalog PR with the pinned 40-char SHA | 4 | **High** |
+| 3 | Record the demo video, under 90 seconds | — | **The script is done and measured** — `scripts/demo_video.py` runs the five phases live in under the limit; recording it needs a screen recorder |
+| 4 | `git init`, commit, and publish the repository | Approval to publish | **High** — the commit exists (`260f9f4`); publishing does not |
+| 5 | Open the catalog PR with the pinned 40-char SHA | 4 | **High** — the entry is prepared and validates against that SHA |
 | 6 | Submit the hackathon entry | 3, 4, 5 | **High** |
 | 7 | Fill in the `sha:` and `OWNER` fields of `catalog-entry/gmi-nexus.yaml` | 4 | Medium |
 
 ### What the live exercise cost
 
 The project's GMI Cloud ceiling is **$10**. The live work so far has used
-roughly **$0.62** of it — about six per cent:
+roughly **$0.87** of it — about nine per cent:
 
 | Activity | Estimated cost |
 | --- | --- |
@@ -483,14 +593,25 @@ roughly **$0.62** of it — about six per cent:
 | Live demo run 4 — the first full demo, with the Dev Agent | $0.10067632 |
 | Live demo run 5 — the run that exposed the truncated reply | $0.12976385 |
 | Live demo run 6 — after the Dev Agent fix; the one recorded in `demo_output/live_run_3.txt` | $0.12827019 |
+| Video run 1 — the five-phase run, which took 348 seconds and showed where the time goes | $0.03269945 |
+| Video runs 2, 3 and 4 — the same five phases, after the probe cache and the code-model block | $0.11161785 |
 | The live vision probe on a real image | $0.000341 |
 | Probing all 24 catalogue-declared vision models with the number challenge | ≈ $0.01 |
 | Assorted one-off probes (parameter variants, URL vs data URI, part type) | ≈ $0.01 |
+| The code-speed probe (two chat completions against every code-capable model) | ≈ $0.005 |
+| The image-speed probe — four configurations, two of which ran | $0.0265 |
+| The generation latency samples — six real generations, timed one by one | $0.0795 |
 
 Each of the six runs is a full nine-phase scenario against the real service:
 analyse, route, generate, implement through Hermes' tools, inspect, correct,
 verify, report. Every figure is the plugin's **own ledger**, priced from the
 tokens the provider actually reported.
+
+Two of the image-speed probe's four configurations cost nothing, because they
+never ran: `Qwen-Image-2512` and `Flux2-Klein` sat in the request queue and
+were never dispatched. The same is true of `Z-Image-Turbo` and `GLM-Image`
+in the latency samples. A request that never produces an asset is not
+billed for one, and it is recorded as a failure rather than as a success.
 
 One number inside a run can exceed the run's ledger: the pipeline's
 `estimated cost` prices the **token budget** each call was allowed, so it is
@@ -574,6 +695,8 @@ hermes-gmi-nexus/
 ├── tests/                        the test suite
 └── scripts/
     ├── demo_run.py               the demo scenario, end to end
+    ├── demo_video.py             the five-phase run the demo video records
+    ├── probes/                   the one-off probes that found the defects
     ├── make_banner.py            draws docs/banner.png (development only)
     └── validate_installation.py  loads the plugin the way Hermes does
 ```

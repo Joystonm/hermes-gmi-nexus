@@ -11,6 +11,7 @@ import json
 import os
 import sys
 import tempfile
+import time
 from pathlib import Path
 from typing import Any
 
@@ -235,6 +236,7 @@ class FakeTransport:
         media_status: str = "success",
         probe_reply: str = PROBE_NUMBER,
         chat_finish_reason: str = "stop",
+        submit_delay: float = 0.0,
     ) -> None:
         self.catalogue = catalogue if catalogue is not None else SAMPLE_CATALOGUE
         self.media_ids = media_ids if media_ids is not None else list(SAMPLE_MEDIA_IDS)
@@ -255,6 +257,12 @@ class FakeTransport:
         #: reply was cut off by the token limit, which is what a real code
         #: model does when the request asks for more room than it was given.
         self.chat_finish_reason = chat_finish_reason
+        #: How long the submission call blocks for, in seconds. The real
+        #: request queue holds the create call open while the request is
+        #: admitted and processed, so a mock that returns instantly would
+        #: hide the difference between the queue's time and the polling
+        #: loop's.
+        self.submit_delay = float(submit_delay)
         self.requests: list[dict[str, Any]] = []
         self.closed = False
 
@@ -339,6 +347,8 @@ class FakeTransport:
             )
 
         if url.endswith("/requests") and method == "POST":
+            if self.submit_delay:
+                time.sleep(self.submit_delay)
             return self._json(200, {"request_id": "req-mock-1", "status": "queued"})
 
         if "/requests/" in url and method == "GET":

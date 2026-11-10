@@ -32,9 +32,10 @@ plugin **directory**, so development tooling must not travel inside it.
 | [`docs/banner.png`](docs/banner.png) | The catalogue card's banner, drawn by [`scripts/make_banner.py`](scripts/make_banner.py). |
 | [`tests/`](tests/) | The test suite. Runs against the plugin package as shipped. |
 | [`scripts/demo_run.py`](scripts/demo_run.py) | The demo scenario, end to end — free in `--dry-run`, real in `--live`. |
+| [`scripts/demo_video.py`](scripts/demo_video.py) | The short live run the demo video records — five phases, under ninety seconds. |
 | [`scripts/validate_installation.py`](scripts/validate_installation.py) | Loads the plugin the way Hermes loads it and proves the contract holds. |
 | [`scripts/make_banner.py`](scripts/make_banner.py) | Draws the banner. A development tool — it needs Pillow, which the plugin itself does not. |
-| [`scripts/probes/`](scripts/probes/) | The one-off scripts that found the six defects the mocked tests could not. Not part of the plugin; each one is documented in [its README](scripts/probes/README.md). |
+| [`scripts/probes/`](scripts/probes/) | The one-off scripts that found the seven defects the mocked tests could not. Not part of the plugin; each one is documented in [its README](scripts/probes/README.md). |
 | [`BUILD_STATUS.md`](BUILD_STATUS.md) | What is done, what is not, and what was tested. |
 
 ---
@@ -203,13 +204,47 @@ and `--approve-spend`, it prints what it is about to spend before it spends
 it, and it does not raise the plugin's own limits.
 
 It has been run end to end against the real service, six times. That is how
-six defects surfaced which the mocked tests could not find — among them a
-catalogue model that answered `"456"` for a number it had never seen, and a
-code model whose replies came back cut off mid-JSON because the token budget
-was too small for a source file. All six are fixed, and all six have
-regression tests. The whole live exercise cost about **$0.62** of the
-project's $10 ceiling; [`BUILD_STATUS.md`](BUILD_STATUS.md) accounts for every
-figure.
+seven defects surfaced which the mocked tests could not find — among them a
+catalogue model that answered `"456"` for a number it had never seen, a code
+model whose replies came back cut off mid-JSON because the token budget was
+too small for a source file, and a reported generation latency of 0.4
+seconds for a generation that had really taken half a minute. All seven are
+fixed, and all seven have regression tests. The whole live exercise cost about
+**$0.87** of the project's $10 ceiling; [`BUILD_STATUS.md`](BUILD_STATUS.md)
+accounts for every figure.
+
+### The short run, for recording
+
+The full scenario takes about four minutes against the real service, so it
+cannot be recorded uncut inside a ninety-second video. `scripts/demo_video.py`
+is the same plugin on the same real service in five phases — the catalogue, a
+generation, a vision inspection, an implementation through Hermes' tools, and
+the report — arranged so the whole thing finishes in time to record straight
+through. The measured run comes in at **69.3 seconds**.
+
+```bash
+GMI_API_KEY=<key> python scripts/demo_video.py --approve-spend --home demo_output/video_home
+```
+
+Two things make the difference between a four-minute run and a short one, and
+both are the plugin working as designed rather than anything being edited out
+of the recording. The **capability probe is cached** — verifying that a model
+can really read an image is a real request, so its verdict is recorded in the
+plugin's own persistent data directory and reused, which means passing the
+same `--home` twice starts the second run with the verdicts already in place.
+And the **operator chooses the code model**: the catalogue publishes each
+model's price and context length but not its speed, so
+[`scripts/probes/probe_code_speed.py`](scripts/probes/probe_code_speed.py)
+measured them, and the script blocks the slow one through the plugin's own
+`blocked_models` setting. If that model is ever retired the block stops
+matching anything and the router falls back to the catalogue on its own.
+
+The image generation is the phase the video cannot do without, and the
+catalogue publishes nothing about how long it takes, so
+[`scripts/probes/probe_image_speed.py`](scripts/probes/probe_image_speed.py)
+measured it: the two cheapest image models in the catalogue waited in the
+request queue for four minutes and were never dispatched, while the models
+that did run took between 14.5 and 21.3 seconds in six cases out of seven.
 
 The dashboard's tests substitute a stand-in router when the installed
 `fastapi` and `starlette` disagree, which is an environment fault that breaks
@@ -219,8 +254,11 @@ exercises the real router instead:
 ```bash
 python -m venv .venv && .venv/Scripts/python -m pip install \
     "fastapi==0.133.1" "uvicorn==0.54.0" "starlette==1.9.0" "python-multipart==0.0.32" pytest
-.venv/Scripts/python -m pytest tests/       # 228 passed, 5 skipped
+.venv/Scripts/python -m pytest tests/       # 229 passed, 5 skipped
 ```
+
+That run was last recorded at 228 passed and 5 skipped, before the suite grew
+by the test that covers the generation-latency fix.
 
 That changes nothing about the machine you run it on — the pins live in the
 virtual environment and shadow whatever the system interpreter has. If you

@@ -82,22 +82,25 @@ plugin's own README, which is the page the catalog renders.
 Four levels, kept separate; see the plugin's
 `docs/HERMES_VALIDATION.md` for the full report.
 
-1. **Unit** — 227 tests, 6 skipped (the live ones), all passing. No network,
-   no cost. Under Hermes' own `web` pins the same suite is **228 passed,
-   5 skipped**, with the real `fastapi` router loaded.
+1. **Unit** — 228 tests, 6 skipped (the live ones), all passing. No network,
+   no cost. Under Hermes' own `web` pins the same suite is **229 passed,
+   5 skipped**, with the real `fastapi` router loaded. (That pinned figure was
+   recorded before the suite grew by the test covering the generation-latency
+   fix.)
 2. **Mock integration** — the real pipeline, router, executor, evaluator,
    storage, budget and dashboard API, with only the HTTP layer stubbed.
    `scripts/demo_run.py --dry-run` runs the whole scenario end to end this
    way: the run's status comes back `completed`, and the page the Dev Agent
    wrote is really on disk and really passes its test.
 3. **Live API** — the catalogue reads, a paid chat completion, a multimodal
-   completion carrying a real image, three image generations through the
-   request queue, and the whole demo scenario have all been run against the
+   completion carrying a real image, image generations through the request
+   queue, and the whole demo scenario have all been run against the
    real service with a real credential. The live test suite exists, is
    opt-in behind `GMI_LIVE_TESTS=1`, and every live figure quoted anywhere
    in this repository is an **estimate priced at the catalogue's published
    rates** — GMI's usage block reports token counts and no dollar amount, so
-   no billed total is claimed.
+   no billed total is claimed. The whole live exercise cost about **$0.87**
+   of the project's $10 ceiling.
 4. **Hermes plugin** — `hermes plugins validate ./plugins/gmi-nexus
    --install-deps` passes with a `safe` security scan, and
    `scripts/validate_installation.py` passes 44/44 by loading the plugin
@@ -106,8 +109,8 @@ Four levels, kept separate; see the plugin's
 ### What the live run found that the mocked tests could not
 
 Worth saying plainly, because it is the argument for running a plugin
-against the real service rather than only against a mock. Six defects were
-found this way and all six are fixed:
+against the real service rather than only against a mock. Seven defects were
+found this way and all seven are fixed:
 
 * the multimodal message part was spelled the Anthropic way (`image`)
   instead of the OpenAI-compatible way (`image_url`), which some models
@@ -124,7 +127,13 @@ found this way and all six are fixed:
   cut off mid-JSON and the error blamed the model rather than the request;
 * the Dev Agent accepted an `approved` flag and never read it, spending
   without consulting the budget guard that every other path in the plugin
-  goes through.
+  goes through;
+* the reported generation latency was not the time the caller waited. The
+  request queue's create call blocks while the request is admitted and
+  processed — a real generation took 24 seconds — and the client was timing
+  only the polling loop that followed it, so the latency in the tool reply,
+  in the report and on the dashboard read **0.4 s**. The clock now starts
+  before the submission.
 
 Each has a regression test.
 
@@ -163,6 +172,18 @@ and say why. It never shows a number NEXUS did not measure.
   `--dry-run` spends nothing and labels every simulated output as such;
   `--live` needs both a credential and `--approve-spend`, and prints what it
   is about to spend before it spends it.
+* `scripts/demo_video.py` is the same plugin on the same real service in five
+  phases — catalogue, generate, see, build, report — arranged so the whole
+  thing finishes inside the ninety seconds the demo video is allowed. The
+  measured run comes in at **69.3 seconds**. The time budget was measured
+  rather than guessed: `scripts/probes/probe_code_speed.py` measured the code
+  models and `scripts/probes/probe_image_speed.py` measured the image models,
+  and the video script expresses both results through the plugin's own
+  `blocked_models` setting — the slow code model is blocked, and the reel asks
+  for the image model's own default rather than pretending a cheaper quality
+  tier is a faster one. Across seven real generations the time was 14.5 s,
+  17.1 s, 17.9 s, 19.3 s, 20.3 s, 21.3 s and one 109.7 s outlier, when the
+  queue held the request for a minute and a half.
 * The live run's RECOVER section **reconciles the published route against
   the route that was actually taken**, out loud. On the live catalogue the
   published code model answers every request with a 400, so the model that
@@ -173,6 +194,8 @@ and say why. It never shows a number NEXUS did not measure.
   the only thing in the repository that needs a third-party package (Pillow),
   it is not in the plugin payload, and the plugin itself still imports nothing
   but the standard library.
+* The one-off scripts that found the seven defects live in `scripts/probes/`,
+  outside the plugin, each documented in that directory's README.
 
 ## Checklist
 

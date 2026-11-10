@@ -272,6 +272,29 @@ def test_a_generation_without_a_prompt_is_refused(settings):
         creative.generate("   ", modality=Modality.IMAGE)
 
 
+def test_the_reported_latency_covers_the_submission_as_well_as_the_polling(settings):
+    """The number the report gives has to be the time the caller waited.
+
+    The request queue's create call can block while the request is admitted
+    and processed, so timing only the polling loop would report a fraction of
+    a second for a generation that took half a minute. That is the kind of
+    number that makes a report look wrong to whoever reads it.
+    """
+    from nexus.providers.gmi_media import clear_duplicates
+
+    clear_duplicates()
+    transport = FakeTransport(submit_delay=0.3)
+    creative = _creative(settings, transport)
+
+    result = creative.generate("a lighthouse at dusk", modality=Modality.IMAGE)
+
+    assert result.ok
+    assert result.latency_ms >= 300, (
+        f"the reported latency {result.latency_ms}ms does not cover the "
+        "time the submission itself took"
+    )
+
+
 def test_the_media_models_are_published_with_their_own_parameters(settings):
     transport = FakeTransport()
     client = HttpClient(transport=transport, max_retries=0, timeout=5.0)

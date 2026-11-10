@@ -19,11 +19,11 @@ document says so.
 
 ## Level 1 — unit tests
 
-**227 tests, 6 skipped. All passing.**
+**228 tests, 6 skipped. All passing.**
 
 ```
 $ python -m pytest tests/
-227 passed, 6 skipped in 12.17s
+228 passed, 6 skipped in 13.79s
 ```
 
 On an interpreter carrying Hermes' own `web` pins the same suite is **228
@@ -155,8 +155,8 @@ of every live call is computed from the catalogue's published rates. These
 are **estimates at list price**, not bills, and they are labelled as such
 everywhere they appear.
 
-The live exercise found six defects that the mocked suite could not, and
-all six are fixed:
+The live exercise found seven defects that the mocked suite could not, and
+all seven are fixed:
 
 1. **The multimodal part type was spelled the wrong way.** The vision path
    sent `{"type": "image"}` — the Anthropic spelling. GMI's endpoint is
@@ -203,6 +203,14 @@ all six are fixed:
    never read, and neither method checked the per-run cap, the daily cap or
    the approval threshold before making a call. Every other path in the
    plugin goes through `budget.enforce()` first; the Dev Agent now does too.
+
+7. **The reported generation latency was not the time the caller waited.**
+   The request queue's create call blocks while the request is admitted and
+   processed — a real generation took 24 seconds — and the client was timing
+   only the polling loop that follows it. So the latency in the tool reply,
+   in `nexus_report` and on the dashboard read **0.4 s** for a generation
+   that took half a minute. The clock now starts before the submission, so
+   the number reported is the number the caller experienced.
 
 The live run also showed that the catalogue's own code model,
 `Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8`, answers **every** request with

@@ -222,9 +222,16 @@ class GmiMediaClient:
             text=str((options or {}).get("text") or prompt),
         )
 
+        # The clock starts before the submission, not after it. The request
+        # queue's create call can block while the request is admitted and
+        # processed, so timing only the polling loop reports a fraction of a
+        # second for a generation that took half a minute. The number the
+        # report gives has to be the time the caller actually waited.
+        started = time.perf_counter()
         request_id = self.submit(model_id, payload)
         _remember(digest, request_id, model_id)
         result = self.wait(request_id, timeout=timeout)
+        result.elapsed_ms = int((time.perf_counter() - started) * 1000)
         result.dropped_options = dropped
         result.estimated_cost_usd = estimated if result.ok else 0.0
         result.raw.setdefault("payload_hash", digest)
