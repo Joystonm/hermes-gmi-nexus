@@ -21,18 +21,21 @@ routable without a code change.
 
 ![A frame from the demo: the live transcript on the left, the generated image and the landing page on the right](docs/demo/gmi-nexus-demo-poster.jpg)
 
-**[Watch the 70-second demo](docs/demo/gmi-nexus-demo.mp4)** — 1920×1080, with
+**[Watch the 80-second demo](docs/demo/gmi-nexus-demo.mp4)** — 1920×1080, with
 narration, inside the ninety seconds the brief allows.
 
 It is a **single continuous take**: no cuts, no re-recordings, no
 reconstructions. The run behind it took **68.6 seconds**, and the video is
-**70.6**. The terminal on the left is that run's own transcript, the numbers
+**80.4**. The terminal on the left is that run's own transcript, the numbers
 on the right are read out of the run's JSON, the image is the asset GMI
 generated during that run, and the landing page is the file the Dev Agent
 wrote and tested during that run — including the RECOVER, where a model the
 provider had retired is refused and the work moves to a different one.
 
-Every number in it was measured by that run. Nothing in it was drawn by hand.
+Every number in it was measured by that run. Nothing in it was drawn by hand,
+and the narration is checked against that run's own JSON before it is
+synthesised and again before the video is cut — so the voice cannot describe
+a run that did not happen.
 
 ---
 
@@ -247,7 +250,7 @@ one on a cold probe cache, where the vision model is probed live — and every
 one of them is inside the ninety-second limit a demo video is allowed.
 
 **It has been recorded.** The cut is at
-[`docs/demo/gmi-nexus-demo.mp4`](docs/demo/gmi-nexus-demo.mp4) — 70.6 seconds,
+[`docs/demo/gmi-nexus-demo.mp4`](docs/demo/gmi-nexus-demo.mp4) — 80.4 seconds,
 1920×1080, narrated, with every number on screen read out of the run that
 produced it.
 

@@ -38,6 +38,10 @@ from typing import Any, Sequence
 
 from PIL import Image, ImageDraw, ImageFont
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import claims  # noqa: E402  (the path is set above)
+
 # --------------------------------------------------------------------------- #
 # The canvas
 # --------------------------------------------------------------------------- #
@@ -261,15 +265,84 @@ def fitted(path: Path, area: tuple[int, int, int, int], crop_top: float = 1.0) -
     return picture.resize(size, Image.LANCZOS)
 
 
-def place(canvas: Image.Image, draw: ImageDraw.ImageDraw, picture: Image.Image | None, area, border=True) -> None:
-    """Centre a picture inside an area, optionally framing it."""
+def place(
+    canvas: Image.Image,
+    draw: ImageDraw.ImageDraw,
+    picture: Image.Image | None,
+    area,
+    border=True,
+    zoom: float = 1.0,
+) -> None:
+    """Centre a picture inside an area, optionally framing it.
+
+    A ``zoom`` above one pushes the picture in slowly — a still frame should
+    never sit dead on the screen — and the overflow is clipped to the area so
+    it never spills over the frame.
+    """
     if picture is None:
         return
+    x0, y0, x1, y1 = area
     if border:
-        rounded(draw, area, 12, PANEL_ALT, BORDER)
-    x = area[0] + (area[2] - area[0] - picture.width) // 2
-    y = area[1] + (area[3] - area[1] - picture.height) // 2
-    canvas.paste(picture, (x, y))
+        rounded(draw, area, 12, PANEL_ALT)
+    if zoom != 1.0:
+        scaled = picture.resize(
+            (max(1, int(picture.width * zoom)), max(1, int(picture.height * zoom))),
+            Image.LANCZOS,
+        )
+        px = x0 + (x1 - x0 - scaled.width) // 2
+        py = y0 + (y1 - y0 - scaled.height) // 2
+        # Only the part of the enlarged picture that lands inside the area is
+        # painted; the rest is masked away rather than clipped afterwards.
+        mask = Image.new("L", scaled.size, 0)
+        inner = (
+            max(0, x0 - px),
+            max(0, y0 - py),
+            min(scaled.width, x1 - px),
+            min(scaled.height, y1 - py),
+        )
+        if inner[2] > inner[0] and inner[3] > inner[1]:
+            mask.paste(255, inner)
+            canvas.paste(scaled, (px, py), mask)
+    else:
+        x = x0 + (x1 - x0 - picture.width) // 2
+        y = y0 + (y1 - y0 - picture.height) // 2
+        canvas.paste(picture, (x, y))
+    if border:
+        draw.rounded_rectangle(area, radius=12, outline=BORDER, width=1)
+
+
+def mix(colour: tuple, toward: tuple, f: float) -> tuple:
+    """Blend ``colour`` toward ``toward`` by ``f`` — 0 keeps, 1 replaces."""
+    f = max(0.0, min(1.0, f))
+    return tuple(int(round(colour[i] + (toward[i] - colour[i]) * f)) for i in range(3))
+
+
+def ease_out(f: float) -> float:
+    """A fast start that settles down."""
+    f = max(0.0, min(1.0, f))
+    return 1 - (1 - f) ** 3
+
+
+def breath(t: float, period: float = 1.0) -> float:
+    """A triangle wave between zero and one.
+
+    It never sits still and it never jumps — the value moves on every single
+    frame. Anything drawn with it changes on every frame too, which is what
+    keeps a still panel from becoming a still picture.
+    """
+    phase = (t % period) / max(period, 0.001)
+    return 1.0 - abs(2.0 * phase - 1.0)
+
+
+def count_to(target: float, phase_t: float, span: float, fmt) -> str:
+    """Format ``target`` as it counts up over the first ``span`` seconds.
+
+    It lands exactly on the real number and stays there. The figure on
+    screen is never anything but the number the run measured — it only
+    arrives at it rather than appearing all at once.
+    """
+    p = min(1.0, max(0.0, phase_t / max(span, 0.001)))
+    return fmt(target * ease_out(p))
 
 
 # --------------------------------------------------------------------------- #
@@ -346,19 +419,27 @@ def draw_terminal(
     lines: Sequence[TermLine],
     revealed: int,
     cursor: bool,
+    fades: dict[int, float] | None = None,
+    cursor_glow: float = 1.0,
 ) -> None:
     """Draw the terminal with the first ``revealed`` lines shown, scrolled.
 
     A field whose value is too wide for the panel is wrapped under its own
     label, so nothing is cut off and nothing overlaps the frame.
+
+    ``fades`` gives, per line, how far that line has faded in — a line that
+    has just appeared slides in and brightens rather than popping onto the
+    screen. The cursor is always there, and it blinks, so the terminal is
+    never a dead still picture.
     """
     x0, y0, x1, y1 = box
     fnt = font("consola.ttf", TERM_FONT)
     bold = font("consolab.ttf", TERM_FONT)
     width = x1 - x0 - 2 * TERM_PAD
+    fades = fades or {}
 
-    rows: list[list[tuple[float, str, tuple, ImageFont.FreeTypeFont]]] = []
-    for line in lines[:revealed]:
+    rows: list[tuple[int, list[tuple[float, str, tuple, ImageFont.FreeTypeFont]]]] = []
+    for index, line in enumerate(lines[:revealed]):
         text, kind = line.text, line.kind
         if kind == "field":
             match = re.match(r"^(\s*)(.*?)\s{2,}(\S.*)$", text)
@@ -369,32 +450,43 @@ def draw_terminal(
                 offset = draw.textlength(label_text, font=fnt) + 12
                 chunks = wrap(draw, value, fnt, width - offset) or [value]
                 rows.append(
-                    [(0.0, label_text, lcolour, fnt), (offset, chunks[0], vcolour, fnt)]
+                    (
+                        index,
+                        [(0.0, label_text, lcolour, fnt), (offset, chunks[0], vcolour, fnt)],
+                    )
                 )
                 for chunk in chunks[1:]:
-                    rows.append([(offset, chunk, vcolour, fnt)])
+                    rows.append((index, [(offset, chunk, vcolour, fnt)]))
                 continue
         if kind == "rule":
-            rows.append([(0.0, text, FAINT, fnt)])
+            rows.append((index, [(0.0, text, FAINT, fnt)]))
         elif kind == "phase":
-            rows.append([(0.0, text, ACCENT, bold)])
+            rows.append((index, [(0.0, text, ACCENT, bold)]))
         elif kind == "note":
-            rows.append([(0.0, text, DIM, fnt)])
+            rows.append((index, [(0.0, text, DIM, fnt)]))
         elif kind == "header":
-            rows.append([(0.0, text, ACCENT, bold)])
+            rows.append((index, [(0.0, text, ACCENT, bold)]))
         else:
-            rows.append([(0.0, text, DIM, fnt)])
+            rows.append((index, [(0.0, text, DIM, fnt)]))
 
     fits = max(1, (y1 - y0 - 2 * TERM_PAD) // TERM_LINE)
     shown = rows[-fits:]
     y = y0 + TERM_PAD
-    for row in shown:
+    cursor_x = x0 + TERM_PAD
+    for index, row in shown:
+        alpha = fades.get(index, 1.0)
+        slide = (1.0 - alpha) * 18.0
         for offset, text, colour, use in row:
-            draw.text((x0 + TERM_PAD + offset, y), text, font=use, fill=colour)
+            shade = mix(colour, PANEL, 1.0 - alpha)
+            draw.text((x0 + TERM_PAD + offset + slide, y), text, font=use, fill=shade)
+            cursor_x = x0 + TERM_PAD + offset + slide + draw.textlength(text, font=use)
         y += TERM_LINE
-    if cursor and len(rows) < fits:
+    if cursor:
+        # The cursor breathes rather than switching off, so the frame changes on
+        # every single one.
+        bright = mix(ACCENT, PANEL, 0.78 * (1.0 - cursor_glow))
         draw.rectangle(
-            (x0 + TERM_PAD, y + 4, x0 + TERM_PAD + 11, y + TERM_LINE - 6), fill=ACCENT
+            (cursor_x + 3, y - TERM_LINE + 4, cursor_x + 14, y - 6), fill=bright
         )
 
 
@@ -418,11 +510,25 @@ def right_intro(draw: ImageDraw.ImageDraw, box) -> None:
     draw.text((x0, rule_y + 158), "no third-party dependencies", font=font("consola.ttf", 19), fill=DIM)
 
 
-def right_catalogue(draw: ImageDraw.ImageDraw, box, run: dict[str, Any]) -> None:
+def right_catalogue(draw: ImageDraw.ImageDraw, box, run: dict[str, Any], phase_t: float) -> None:
     x0, y0, x1, y1 = box
     catalogue = step_payload(run, "analyse").get("catalogue") or {}
-    stat_tile(draw, (x0, y0 + 8, x1 - 30, y0 + 146), str(catalogue.get("llm_models") or 0), "language models", WHITE)
-    stat_tile(draw, (x0, y0 + 160, x1 - 30, y0 + 298), str(catalogue.get("media_models") or 0), "generation models", ACCENT)
+    llm = float(catalogue.get("llm_models") or 0)
+    media = float(catalogue.get("media_models") or 0)
+    stat_tile(
+        draw,
+        (x0, y0 + 8, x1 - 30, y0 + 146),
+        count_to(llm, phase_t, 1.1, lambda v: f"{int(round(v))}"),
+        "language models",
+        WHITE,
+    )
+    stat_tile(
+        draw,
+        (x0, y0 + 160, x1 - 30, y0 + 298),
+        count_to(media, phase_t, 1.4, lambda v: f"{int(round(v))}"),
+        "generation models",
+        ACCENT,
+    )
     by = catalogue.get("media_by_modality") or {}
     if isinstance(by, dict) and by:
         draw.text(
@@ -475,6 +581,7 @@ def right_generate(
     run: dict[str, Any],
     image: Path | None,
     show_defects: bool,
+    zoom: float = 1.0,
 ) -> None:
     x0, y0, x1, y1 = box
     media = step_payload(run, "media")
@@ -484,11 +591,11 @@ def right_generate(
         if show_defects:
             area = (x0, y0, x0 + 200, y0 + 200)
             picture = fitted(image, area)
-            place(canvas, draw, picture, area, border=False)
+            place(canvas, draw, picture, area, border=False, zoom=zoom)
         else:
             area = (x0, y0, x1 - 30, y0 + 392)
             picture = fitted(image, area)
-            place(canvas, draw, picture, area)
+            place(canvas, draw, picture, area, zoom=zoom)
     if not show_defects:
         draw.text(
             (x0 + 4, y0 + 404),
@@ -534,13 +641,14 @@ def right_build(
     box,
     run: dict[str, Any],
     screenshot: Path | None,
+    zoom: float = 1.0,
 ) -> None:
     x0, y0, x1, y1 = box
     dev = step_payload(run, "dev")
     if screenshot is not None and screenshot.exists():
         area = (x0, y0, x1 - 30, y0 + 452)
         picture = fitted(screenshot, area, crop_top=0.68)
-        place(canvas, draw, picture, area)
+        place(canvas, draw, picture, area, zoom=zoom)
     y = y0 + 466
     files = dev.get("files") or []
     if files:
@@ -571,16 +679,25 @@ def right_build(
             y += 22
 
 
-def right_report(draw: ImageDraw.ImageDraw, box, run: dict[str, Any]) -> None:
+def right_report(draw: ImageDraw.ImageDraw, box, run: dict[str, Any], phase_t: float) -> None:
     x0, y0, x1, y1 = box
     report = step_payload(run, "report")
     usage = report.get("usage") or {}
     budget = report.get("budget") or {}
-    stat_tile(draw, (x0, y0 + 4, x1 - 30, y0 + 128), f"{usage.get('prompt_tokens') or 0:,}", "tokens used", WHITE, big=44)
+    tokens = float(usage.get("prompt_tokens") or 0)
+    spend = float(budget.get("daily_spend_usd") or 0)
+    stat_tile(
+        draw,
+        (x0, y0 + 4, x1 - 30, y0 + 128),
+        count_to(tokens, phase_t, 1.3, lambda v: f"{int(round(v)):,}"),
+        "tokens used",
+        WHITE,
+        big=44,
+    )
     stat_tile(
         draw,
         (x0, y0 + 142, x1 - 30, y0 + 266),
-        f"${budget.get('daily_spend_usd') or 0}",
+        count_to(spend, phase_t, 1.6, lambda v: f"${v:.6f}"),
         "spent, estimated at list price",
         AMBER,
         big=40,
@@ -670,48 +787,89 @@ def draw_pipeline(draw: ImageDraw.ImageDraw, t: float, timeline: Timeline) -> No
     y = 966
     slot = (WIDTH - 112) / len(PIPELINE)
     fnt = font("consola.ttf", 19)
+    pulse = breath(t, 1.4)
     for index, name in enumerate(PIPELINE):
         x = 56 + index * slot
         colour = ACCENT if name in active else FAINT
         draw.text((x, y), name, font=fnt, fill=colour)
         if name in active:
             width = draw.textlength(name, font=fnt)
-            draw.rectangle((x, y + 26, x + width, y + 29), fill=ACCENT)
+            hot = mix(ACCENT, PANEL, 0.85 * (1.0 - pulse))
+            draw.rectangle((x, y + 26, x + width, y + 29), fill=hot)
 
 
-def draw_title_card(draw: ImageDraw.ImageDraw, t: float) -> None:
-    """The splash before the run starts."""
+def draw_title_card(draw: ImageDraw.ImageDraw, t: float, glow: float) -> None:
+    """The splash before the run starts.
+
+    It fades up out of the background rather than appearing all at once, and
+    the rule under the name breathes for as long as the card is up.
+    """
     draw.rectangle((0, 0, WIDTH, HEIGHT), fill=BG)
-    draw.text((WIDTH // 2, 430), "GMI NEXUS", font=font("segoeuib.ttf", 96), fill=WHITE, anchor="mm")
+    fade = min(1.0, t / 0.8)
+    late = min(1.0, max(0.0, (t - 0.35) / 0.6))
+
+    def faded(colour, f: float) -> tuple:
+        return mix(colour, BG, 1.0 - f)
+
+    draw.text(
+        (WIDTH // 2, 430),
+        "GMI NEXUS",
+        font=font("segoeuib.ttf", 96),
+        fill=faded(WHITE, fade),
+        anchor="mm",
+    )
+    title_width = draw.textlength("GMI NEXUS", font=font("segoeuib.ttf", 96))
+    draw.rectangle(
+        (WIDTH // 2 - title_width / 2, 492, WIDTH // 2 + title_width / 2, 496),
+        fill=mix(ACCENT, BG, 0.75 * (1.0 - glow)),
+    )
     draw.text(
         (WIDTH // 2, 540),
         "a Hermes Agent plugin",
         font=font("segoeui.ttf", 32),
-        fill=ACCENT,
+        fill=faded(ACCENT, fade),
         anchor="mm",
     )
     draw.text(
         (WIDTH // 2, 600),
         "one goal · many models · one coordinated system",
         font=font("segoeui.ttf", 24),
-        fill=DIM,
+        fill=faded(DIM, late),
         anchor="mm",
     )
 
 
-def draw_end_card(draw: ImageDraw.ImageDraw, t: float, timeline: Timeline) -> None:
+def draw_end_card(
+    draw: ImageDraw.ImageDraw, t: float, timeline: Timeline, glow: float
+) -> None:
     """The closing card: the name, the pipeline, and the ask."""
     draw.rectangle((0, 0, WIDTH, HEIGHT), fill=BG)
     segment = timeline.segment_at(t)
     fraction = 0.0
     if segment:
         fraction = (t - segment.start) / max(segment.duration, 0.001)
-    draw.text((WIDTH // 2, 250), "GMI NEXUS", font=font("segoeuib.ttf", 92), fill=WHITE, anchor="mm")
+    fade = min(1.0, (t - segment.start) / 0.7) if segment else 1.0
+
+    def faded(colour, f: float) -> tuple:
+        return mix(colour, BG, 1.0 - f)
+
+    draw.text(
+        (WIDTH // 2, 250),
+        "GMI NEXUS",
+        font=font("segoeuib.ttf", 92),
+        fill=faded(WHITE, fade),
+        anchor="mm",
+    )
+    title_width = draw.textlength("GMI NEXUS", font=font("segoeuib.ttf", 92))
+    draw.rectangle(
+        (WIDTH // 2 - title_width / 2, 304, WIDTH // 2 + title_width / 2, 308),
+        fill=mix(ACCENT, BG, 0.75 * (1.0 - glow)),
+    )
     draw.text(
         (WIDTH // 2, 348),
         "one goal · many models · one coordinated system",
         font=font("segoeui.ttf", 30),
-        fill=DIM,
+        fill=faded(DIM, fade),
         anchor="mm",
     )
     shown = max(1, min(len(PIPELINE), int(fraction * len(PIPELINE) * 1.7) + 1))
@@ -719,34 +877,34 @@ def draw_end_card(draw: ImageDraw.ImageDraw, t: float, timeline: Timeline) -> No
     width = sum(draw.textlength(name, font=fnt) + 40 for name in PIPELINE[:shown])
     x = (WIDTH - width) / 2
     for name in PIPELINE[:shown]:
-        draw.text((x, 452), name, font=fnt, fill=ACCENT)
+        draw.text((x, 452), name, font=fnt, fill=faded(ACCENT, fade))
         x += draw.textlength(name, font=fnt) + 40
     draw.text(
         (WIDTH // 2, 560),
         "eight phases · five modules · eight tools · one command",
         font=font("segoeui.ttf", 21),
-        fill=FAINT,
+        fill=faded(FAINT, fade),
         anchor="mm",
     )
     draw.text(
         (WIDTH // 2, 680),
         "Built against the live GMI Cloud service.",
         font=font("segoeui.ttf", 26),
-        fill=TEXT,
+        fill=faded(TEXT, fade),
         anchor="mm",
     )
     draw.text(
         (WIDTH // 2, 722),
         "Every number in this video came from one real run.",
         font=font("segoeui.ttf", 22),
-        fill=DIM,
+        fill=faded(DIM, fade),
         anchor="mm",
     )
     draw.text(
         (WIDTH // 2, 830),
         "@NousResearch  ·  Hermes Agent Plugin Hackathon",
         font=font("consola.ttf", 24),
-        fill=ACCENT,
+        fill=faded(ACCENT, fade),
         anchor="mm",
     )
 
@@ -762,46 +920,77 @@ def draw_frame(
     image: Path | None,
     screenshot: Path | None,
     fraction: float,
+    fades: dict[int, float] | None = None,
 ) -> None:
     """Draw one frame of the video."""
     draw.rectangle((0, 0, WIDTH, HEIGHT), fill=BG)
     segment = timeline.segment_at(t)
     segment_id = segment.id if segment else "title"
+    glow = breath(t)
 
     if segment_id == "title":
-        draw_title_card(draw, t)
+        draw_title_card(draw, t, glow)
         return
     if segment_id == "outro":
-        draw_end_card(draw, t, timeline)
+        draw_end_card(draw, t, timeline, glow)
         return
 
     draw.text((56, 28), "GMI NEXUS", font=font("segoeuib.ttf", 34), fill=WHITE)
     draw.text((252, 36), "a Hermes Agent plugin", font=font("segoeui.ttf", 21), fill=DIM)
-    draw.text(
-        (WIDTH - 56, 36),
-        "live, against GMI Cloud",
-        font=font("consola.ttf", 20),
-        fill=ACCENT,
-        anchor="ra",
+
+    # The run is live, and the dot says so — it pulses for as long as the run
+    # is on screen, so the header is never a still picture.
+    live_fnt = font("consola.ttf", 20)
+    live_text = "live, against GMI Cloud"
+    live_width = draw.textlength(live_text, font=live_fnt)
+    draw.text((WIDTH - 56, 36), live_text, font=live_fnt, fill=ACCENT, anchor="ra")
+    dot_x = WIDTH - 56 - live_width - 20
+    draw.ellipse(
+        (dot_x, 37, dot_x + 13, 50),
+        fill=mix(ACCENT, PANEL, 0.7 * (1.0 - glow)),
     )
-    draw.line((56, 92, WIDTH - 56, 92), fill=BORDER)
+
+    # The rule doubles as the progress bar: how far through the run we are.
+    draw.rectangle((56, 90, WIDTH - 56, 94), fill=(20, 28, 48))
+    progress = min(1.0, t / max(timeline.total, 0.001))
+    done = int((WIDTH - 112) * progress)
+    if done > 0:
+        draw.rectangle((56, 90, 56 + done, 94), fill=ACCENT)
 
     term_inner = panel(draw, (56, 120, 1186, 920), "gmi-nexus — one live run")
-    draw_terminal(draw, term_inner, lines, revealed, cursor=(revealed < len(lines)))
+    draw_terminal(
+        draw,
+        term_inner,
+        lines,
+        revealed,
+        cursor=True,
+        fades=fades,
+        cursor_glow=glow,
+    )
 
     side_inner = panel(draw, (1216, 120, 1864, 920), "what this means")
+    phase_t = t - segment.start if segment else 0.0
+    zoom = 1.0 + 0.09 * fraction
     if segment_id == "intro":
         right_intro(draw, side_inner)
     elif segment_id == "catalogue":
-        right_catalogue(draw, side_inner, run)
+        right_catalogue(draw, side_inner, run, phase_t)
     elif segment_id == "route":
         right_route(draw, side_inner, run)
     elif segment_id == "generate":
-        right_generate(canvas, draw, side_inner, run, image, show_defects=fraction > 0.45)
+        right_generate(
+            canvas,
+            draw,
+            side_inner,
+            run,
+            image,
+            show_defects=fraction > 0.45,
+            zoom=zoom,
+        )
     elif segment_id == "build":
-        right_build(canvas, draw, side_inner, run, screenshot)
+        right_build(canvas, draw, side_inner, run, screenshot, zoom=zoom)
     elif segment_id == "report":
-        right_report(draw, side_inner, run)
+        right_report(draw, side_inner, run, phase_t)
 
     draw_pipeline(draw, t, timeline)
 
@@ -825,6 +1014,21 @@ class Reveal:
             if when <= t:
                 count = max(count, index + 1)
         return count
+
+    def fade_at(self, segment_id: str, t: float, span: float = 0.5) -> dict[int, float]:
+        """How far each line on screen has faded in.
+
+        A line that has just appeared is dim and a little to the left; it
+        brightens and settles over ``span`` seconds. Lines that have been up
+        a while are fully lit.
+        """
+        fades: dict[int, float] = {}
+        for index, when in self.schedule.get(segment_id, []):
+            age = t - when
+            if age < 0:
+                continue
+            fades[index] = min(1.0, age / max(span, 0.001))
+        return fades
 
 
 def build_reveal(
@@ -938,6 +1142,25 @@ def build(args: argparse.Namespace) -> int:
         print(f"Only {len(phases)} phases found in the transcript.", file=sys.stderr)
         return 1
 
+    # The voice describes this run. If the narration and the run disagree —
+    # a different catalogue, a different model, a different cost — the video
+    # is not cut, because the words would be describing something that did
+    # not happen.
+    spoken = {
+        str(entry.get("id")): str(entry.get("text") or "")
+        for entry in narration.get("segments") or []
+    }
+    problems = claims.check(run, spoken, narration.get("claims"))
+    if problems:
+        print(
+            "The narration does not match this run:\n  "
+            + "\n  ".join(problems)
+            + "\nThe video was not cut.",
+            file=sys.stderr,
+        )
+        return 1
+    print(f"Checked {len(narration.get('claims') or [])} narration claims. All true.")
+
     order = ["intro", "catalogue", "route", "generate", "build", "report", "outro"]
     timeline = build_timeline(narration, order)
     lines, blocks = terminal_lines(header, phases)
@@ -995,8 +1218,19 @@ def build(args: argparse.Namespace) -> int:
         if segment:
             fraction = (t - segment.start) / max(segment.duration, 0.001)
         revealed = reveal.count_at(segment_id, t) if segment else 0
+        fades = reveal.fade_at(segment_id, t) if segment else {}
         draw_frame(
-            canvas, draw, t, timeline, reveal.lines, revealed, run, image, screenshot, fraction
+            canvas,
+            draw,
+            t,
+            timeline,
+            reveal.lines,
+            revealed,
+            run,
+            image,
+            screenshot,
+            fraction,
+            fades,
         )
         process.stdin.write(canvas.tobytes())
         if index % 150 == 0:

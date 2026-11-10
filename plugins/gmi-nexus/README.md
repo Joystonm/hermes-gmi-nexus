@@ -55,7 +55,7 @@ real Hermes install — and states plainly what has **not** been verified.
 
 ![A frame from the demo: the live transcript on the left, the generated image and the landing page on the right](../../docs/demo/gmi-nexus-demo-poster.jpg)
 
-**[Watch the 70-second demo](../../docs/demo/gmi-nexus-demo.mp4)** — 1920×1080,
+**[Watch the 80-second demo](../../docs/demo/gmi-nexus-demo.mp4)** — 1920×1080,
 with narration.
 
 Every number in it came out of one real run against GMI Cloud, and nothing in
@@ -67,7 +67,7 @@ provider had retired is refused and the work moves to a different one.
 
 The video is a single continuous take: no cuts, no re-recordings, no
 reconstructions. The run behind it took **68.6 seconds**, and the video is
-**70.6**.
+**80.4**.
 
 ---
 

@@ -19,11 +19,11 @@ document says so.
 
 ## Level 1 — unit tests
 
-**250 tests collected, 6 skipped, 244 passed. All passing.**
+**274 tests collected, 6 skipped, 268 passed. All passing.**
 
 ```
 $ python -m pytest tests/
-244 passed, 6 skipped in 13.80s
+268 passed, 6 skipped in 9.20s
 ```
 
 On an interpreter carrying Hermes' own `web` pins the same suite was last
@@ -47,6 +47,7 @@ Each test file covers one module:
 | `test_plugin.py` | 24 | The registration contract: the eight tools, their schemas, the command, the credential handling. |
 | `test_dashboard.py` | 18 | The dashboard's six routes, their payloads and their empty states. |
 | `test_resilience.py` | 14 | What the live runs taught the plugin to survive: the provider's real reason read out of a nested error, a retired model remembered and excluded from the candidates, a code reply whose newlines were written literally, and the retry that shows the model the reply which failed. |
+| `test_video_claims.py` | 24 | The demo video's narration, and the check that keeps it true: the numbers a person says, reading a value out of a run's JSON, and the refusal to synthesise or cut a video whose voice describes a run that did not happen. |
 | `test_live.py` | 5 | **Level 3.** Skipped unless explicitly opted in. |
 
 The **5 skipped** tests are all in `test_live.py` — they are skipped because
@@ -84,7 +85,7 @@ for how the environment is created.
 
 ## Level 2 — mock integration
 
-Included in the 244 above; this level describes *which* of them are
+Included in the 268 above; this level describes *which* of them are
 integration-shaped rather than unit-shaped.
 
 The provider is stubbed at the HTTP layer (`nexus.http.HttpResponse`), never

@@ -480,19 +480,36 @@ that run and nothing else:
 | The report | `video_run.json` → `report`. |
 | The eight-phase ribbon | The pipeline, highlighted by the phase each beat belongs to. |
 
-The voice is Inworld TTS (`inworld-tts-2`, voice `Ashley`). All seven
-segments were synthesised in **one request** — the API's `script.utterances`
-with `outputMode: PER_UTTERANCE` — so nothing was paid for twice, and the
-whole narration cost 996 characters against one round trip.
+The voice is Inworld TTS (`inworld-tts-2`, voice `Ashley`, `deliveryMode:
+CREATIVE`). All seven segments were synthesised in **one request** — the
+API's `script.utterances` with `outputMode: PER_UTTERANCE` — so nothing was
+paid for twice, and the whole narration cost 1302 characters against one
+round trip. The script is written the way a person talks: short sentences
+next to long ones, a `<break>` where a person would pause, a breath, and a
+per-segment speaking rate that moves about instead of holding one note.
+
+Every factual claim the voice makes is written down as a path into the run's
+own JSON — the catalogue counts, the model that was refused, the tokens, the
+cost — and `scripts/video/claims.py` resolves those paths against the run and
+compares them with what the script says. The narration is refused before it
+is synthesised if the two disagree, and the video is refused before it is cut
+if they still disagree.
 
 ```
 $ ffprobe demo_output/gmi-nexus-demo.mp4
-duration=70.634   1920x1080   h264 + aac   30 fps   4.8 MB
+duration=80.390   1920x1080   h264 + aac   30 fps   2411 frames   6.2 MB
 ```
 
-**70.6 seconds**, inside the ninety the brief allows, and every frame of it
+**80.4 seconds**, inside the ninety the brief allows, and every frame of it
 is either a line the plugin printed or a number the run measured. The
 narration's peak is normalised to −1 dBFS so it is audible on a phone.
+
+Nothing in it sits still. The terminal types itself out, the lines fade and
+slide in as they arrive, the cursor breathes, the counts on the right count
+up to the figures the run measured, the images push in slowly, and the bar
+along the top is the run's own progress. Measured over the finished file:
+**2411 frames, 2406 distinct, and one pair of adjacent frames identical** —
+so the picture moves on every frame but one.
 
 The video is in the repository at
 [`docs/demo/gmi-nexus-demo.mp4`](docs/demo/gmi-nexus-demo.mp4), with a poster
@@ -581,7 +598,7 @@ commit.
 
 ```
 $ python -m pytest tests/
-244 passed, 6 skipped in 13.80s
+268 passed, 6 skipped in 9.20s
 ```
 
 On an interpreter carrying Hermes' own `web` pins the same suite was **230
@@ -589,8 +606,9 @@ passed, 5 skipped** — the sixth skip is the environment test that reports the
 `fastapi`/`starlette` mismatch, and it passes once the versions agree. The pins
 are installed into a virtual environment, so the system interpreter is never
 modified. That pinned run was recorded before the suite grew by the fourteen
-resilience tests, so the pinned figures are behind; they are quoted as they
-were measured rather than restated as current.
+resilience tests and the twenty-four narration-claim tests, so the pinned
+figures are behind; they are quoted as they were measured rather than
+restated as current.
 
 The 5 skipped tests are the live API tests, skipped because `GMI_LIVE_TESTS`
 is not set. That is their intended behaviour.
@@ -655,7 +673,7 @@ for what each check proves.
 ## Known issues
 
 1. **The demo video is recorded but not yet posted.** It is cut, checked and
-   in the repository at `docs/demo/gmi-nexus-demo.mp4` — 70.6 seconds,
+   in the repository at `docs/demo/gmi-nexus-demo.mp4` — 80.4 seconds,
    1920×1080, with narration — but posting it to X and filing the hackathon
    form are outward-facing actions that need a human.
 
@@ -719,7 +737,7 @@ environment test no longer has to substitute a stub router.
 | --- | --- | --- | --- |
 | 1 | Run one live inference and one live generation, within the $10 ceiling | — | **Done** — inference, vision and three image generations, all live |
 | 2 | Run `scripts/demo_run.py --live` end to end | — | **Done** — the ninth phase completed; the transcript is `demo_output/live_run_3.txt` |
-| 3 | Record the demo video, under 90 seconds | — | **Done** — 70.6 s, at `docs/demo/gmi-nexus-demo.mp4`; still to be posted to X |
+| 3 | Record the demo video, under 90 seconds | — | **Done** — 80.4 s, at `docs/demo/gmi-nexus-demo.mp4`; still to be posted to X |
 | 4 | `git init`, commit, and publish the repository | Approval to publish | **High** — the commit exists; publishing does not |
 | 5 | Open the catalog PR with the pinned 40-char SHA | 4 | **High** — the entry is prepared and validates against that SHA |
 | 6 | Submit the hackathon entry | 3, 4, 5 | **High** |
