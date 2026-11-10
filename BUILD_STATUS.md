@@ -360,6 +360,12 @@ the published code model answered with a 400, the plugin moved to a different
 model, wrote the file and passed the test. The vision model it used had been
 probed in that run and had read the drawn number correctly.
 
+Two further runs of the same script came after the ninth and tenth defects
+were fixed. The first took **91.7 s** and failed in the BUILD phase — that is
+the run that exposed them. The second took **68.6 s**, wrote the file, passed
+the test and produced a complete report, and it is the run the demo video is
+cut from.
+
 Two changes were made because of the measurements rather than because of
 guesses. The generation asks for a JPEG instead of a PNG — the model
 publishes the option and the plugin passes it through — which is a tenth of
@@ -403,6 +409,94 @@ no-code-model, and both demo scripts — which now print the error and stop,
 because a reel that records ninety seconds of "no eligible model" is worse
 than no reel at all. Two regression tests cover it, and the demo script's
 refusal is visible in the transcript the script writes.
+
+#### The ninth and tenth defects, found by the recorded run
+
+The reel that the demo video is cut from failed its first attempt, in the
+BUILD phase, at 91.7 seconds — over the limit. The transcript said the model
+did not return a usable file list. It was not the model.
+
+**Ninth: a retired model stayed routable, and the provider's real reason was
+swallowed.** GMI Cloud publishes the catalogue and the models it can actually
+serve separately, so `Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8` was still
+listed long after the provider had deprecated it. The router chose it, called
+it, and was refused:
+
+```
+HTTP 400
+{"error": {"message": "Backend request failed with status 400",
+            "details": "{\"error\": {\"code\": \"UnavailableModel\",
+                        \"message\": \"The requested model has been deprecated
+                                    and is no longer available.\"}}"}}
+```
+
+The real reason was there, one level down, and the plugin flattened the whole
+thing to *"Backend request failed with status 400"* — a sentence that says
+nothing and blames the wrong thing. Three changes followed:
+
+| Change | What it does |
+| --- | --- |
+| `nexus/errors.py` | Reads the nested detail and reports the provider's own wording, with the wrapper's wording kept only when it adds something. |
+| `nexus/storage.py` | A `retired_models` table, with the reason and the time it was recorded. |
+| `nexus/providers/gmi_llm.py` | A refusal that reads as a retirement is recorded, so the router never asks that model again. |
+
+`nexus/registry.py` applies the remembered verdicts on every catalogue read,
+marking a retired model `is_ready = False`, and the Dev Agent filters retired
+models out of its candidates both before it starts and after each failed
+attempt. The same run then **recovered on a different model and finished in
+68.6 seconds** — and the recovery is on screen, because it is what happened.
+
+**Tenth: a good reply was thrown away because the JSON was not quite JSON.**
+Asked for a file as a JSON string, a model sometimes writes the file's
+newlines literally. The answer is right and the JSON is not, and the reply was
+discarded as unparseable. Worse, the retry prompt did not show the model the
+reply that had failed, so the model repeated the same malformed answer and the
+run ended with nothing. The parser now repairs raw newlines, tabs and control
+characters **inside JSON string literals** and retries the parse; the retry
+prompt carries the model's own unusable reply, the exact shape it must use,
+and the rule that a newline inside a string is written as `\n`. A reply that
+needs no repair is untouched.
+
+Fourteen regression tests cover the two defects, in
+`tests/test_resilience.py`.
+
+### The demo video, recorded
+
+The reel that the video is cut from is the one the ninth defect spoiled: the
+same five phases, live, ending in a RECOVER that a human can see happen. It
+took **68.6 seconds** and it is the run in `demo_output/reel2/`.
+
+The video is built by `scripts/video/build_video.py`, and it is built from
+that run and nothing else:
+
+| On screen | Where it comes from |
+| --- | --- |
+| The terminal | The run's own transcript, line for line, revealed on the clock. |
+| The catalogue counts | `video_run.json` → `analyse.catalogue`. |
+| The routing table | `video_run.json` → `analyse.routing_preview` — the same six rows the transcript shows. |
+| The hero image | The asset GMI generated during that run, downloaded from the storage URL the run returned. |
+| The vision critique | `video_run.json` → `vision.structured`. The same three issues the transcript shows. |
+| The landing page | A headless-Chrome render of `landing/index.html`, the file the Dev Agent wrote and whose test passed. |
+| The report | `video_run.json` → `report`. |
+| The eight-phase ribbon | The pipeline, highlighted by the phase each beat belongs to. |
+
+The voice is Inworld TTS (`inworld-tts-2`, voice `Ashley`). All seven
+segments were synthesised in **one request** — the API's `script.utterances`
+with `outputMode: PER_UTTERANCE` — so nothing was paid for twice, and the
+whole narration cost 996 characters against one round trip.
+
+```
+$ ffprobe demo_output/gmi-nexus-demo.mp4
+duration=70.634   1920x1080   h264 + aac   30 fps   4.8 MB
+```
+
+**70.6 seconds**, inside the ninety the brief allows, and every frame of it
+is either a line the plugin printed or a number the run measured. The
+narration's peak is normalised to −1 dBFS so it is audible on a phone.
+
+The video is in the repository at
+[`docs/demo/gmi-nexus-demo.mp4`](docs/demo/gmi-nexus-demo.mp4), with a poster
+frame beside it.
 
 ### Documentation
 
@@ -487,7 +581,7 @@ commit.
 
 ```
 $ python -m pytest tests/
-230 passed, 6 skipped in 13.88s
+244 passed, 6 skipped in 9.36s
 ```
 
 On an interpreter carrying Hermes' own `web` pins the same suite was **230
@@ -559,15 +653,13 @@ for what each check proves.
 
 ## Known issues
 
-1. **The demo video has not been recorded yet.** The script that records it
-   is written and measured — `scripts/demo_video.py` runs the same plugin on
-   the same real service in five phases and finishes inside the time limit —
-   but recording it, and posting it, is the last step and needs a human with
-   a screen recorder.
+1. **The demo video is recorded but not yet posted.** It is cut, checked and
+   in the repository at `docs/demo/gmi-nexus-demo.mp4` — 70.6 seconds,
+   1920×1080, with narration — but posting it to X and filing the hackathon
+   form are outward-facing actions that need a human.
 
 2. **The repository is committed but not published.** The tree is a git
-   repository with the whole plugin on one commit
-   (`260f9f47782643e60502a44f698151a70ede7c88`), and the catalog entry has
+   repository with the whole plugin on one commit, and the catalog entry has
    been prepared against that SHA. Nothing has been pushed: publishing a
    repository and opening a pull request against someone else's project are
    outward-facing actions, and they need an explicit go-ahead.
@@ -626,8 +718,8 @@ environment test no longer has to substitute a stub router.
 | --- | --- | --- | --- |
 | 1 | Run one live inference and one live generation, within the $10 ceiling | — | **Done** — inference, vision and three image generations, all live |
 | 2 | Run `scripts/demo_run.py --live` end to end | — | **Done** — the ninth phase completed; the transcript is `demo_output/live_run_3.txt` |
-| 3 | Record the demo video, under 90 seconds | — | **The script is done and measured** — `scripts/demo_video.py` runs the five phases live in under the limit; recording it needs a screen recorder |
-| 4 | `git init`, commit, and publish the repository | Approval to publish | **High** — the commit exists (`260f9f4`); publishing does not |
+| 3 | Record the demo video, under 90 seconds | — | **Done** — 70.6 s, at `docs/demo/gmi-nexus-demo.mp4`; still to be posted to X |
+| 4 | `git init`, commit, and publish the repository | Approval to publish | **High** — the commit exists; publishing does not |
 | 5 | Open the catalog PR with the pinned 40-char SHA | 4 | **High** — the entry is prepared and validates against that SHA |
 | 6 | Submit the hackathon entry | 3, 4, 5 | **High** |
 | 7 | Fill in the `sha:` and `OWNER` fields of `catalog-entry/gmi-nexus.yaml` | 4 | Medium |
@@ -635,7 +727,7 @@ environment test no longer has to substitute a stub router.
 ### What the live exercise cost
 
 The project's GMI Cloud ceiling is **$10**. The live work so far has used
-roughly **$0.98** of it — about a tenth:
+roughly **$1.10** of it — about a ninth:
 
 | Activity | Estimated cost |
 | --- | --- |
@@ -650,6 +742,8 @@ roughly **$0.98** of it — about a tenth:
 | Video run 5 — the first of the two recorded reels, at 53.4 seconds | $0.0322753 |
 | Video run 6 — the second recorded reel, at 76.0 seconds | $0.0327651 |
 | Video run 7 — the verification reel, on a cold probe cache, at 82.2 seconds | $0.0430088 |
+| Reel run 8 — the run the demo video is cut from, which failed at 91.7 s and exposed the ninth defect | $0.0827956 |
+| Reel run 9 — the same reel after the ninth and tenth defects were fixed, at 68.6 s | $0.0353837 |
 | The live vision probe on a real image | $0.000341 |
 | Probing all 24 catalogue-declared vision models with the number challenge | ≈ $0.01 |
 | Assorted one-off probes (parameter variants, URL vs data URI, part type) | ≈ $0.01 |
@@ -740,6 +834,7 @@ hermes-gmi-nexus/
 │   └── PRDRAFT.md                the PR description and the rule-13 disclosure
 ├── docs/
 │   ├── banner.png                the catalogue card's banner, 1200x600
+│   ├── demo/                     the demo video and its poster frame
 │   └── screenshots/              the dashboard, photographed in a real browser
 ├── plugins/
 │   └── gmi-nexus/                ← the plugin. This is what Hermes installs.
@@ -755,6 +850,7 @@ hermes-gmi-nexus/
 └── scripts/
     ├── demo_run.py               the demo scenario, end to end
     ├── demo_video.py             the five-phase run the demo video records
+    ├── video/                    the narration and the video renderer
     ├── probes/                   the one-off probes that found the defects
     ├── make_banner.py            draws docs/banner.png (development only)
     └── validate_installation.py  loads the plugin the way Hermes does

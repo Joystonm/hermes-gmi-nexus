@@ -165,8 +165,70 @@ def error_from_response(status: int, body: str) -> NexusError:
     return cls(message, detail=body[:2000], status=status)
 
 
+#: The phrases a provider uses when it will not serve a model any more.
+#:
+#: GMI's catalogue is published independently of the models that can actually
+#: be served, so a retired model can keep its place in the catalogue after the
+#: provider has dropped it. A call to one of those comes back as a generic
+#: failure with the real reason nested inside it, and this is where that
+#: reason is recognised.
+RETIREMENT_SIGNALS: tuple[str, ...] = (
+    "deprecated",
+    "no longer available",
+    "unavailablemodel",
+    "model not found",
+    "does not exist",
+    "has been retired",
+    "is retired",
+    "not available on this",
+)
+
+
+def is_retirement_message(message: str) -> bool:
+    """Whether an error message says the model itself is gone.
+
+    A retired model does not come back on a retry, so this is worth
+    remembering: the plugin records it and stops routing to it.
+    """
+    lowered = (message or "").lower()
+    return any(signal in lowered for signal in RETIREMENT_SIGNALS)
+
+
+def _message_from_details(details: Any) -> str:
+    """Pull the real reason out of a wrapped error's ``details``."""
+    if isinstance(details, str):
+        text = details.strip()
+        if not text:
+            return ""
+        try:
+            import json
+
+            parsed = json.loads(text)
+        except (ValueError, TypeError):
+            return text[:300]
+        return _message_from_details(parsed)
+    if isinstance(details, dict):
+        err = details.get("error")
+        if isinstance(err, dict):
+            for key in ("message", "detail"):
+                value = err.get(key)
+                if isinstance(value, str) and value.strip():
+                    return value.strip()[:300]
+        for key in ("message", "detail"):
+            value = details.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()[:300]
+    return ""
+
+
 def _extract_error_message(body: str) -> str:
-    """Pull a human-readable message out of a GMI/OpenAI-style error body."""
+    """Pull a human-readable message out of a GMI/OpenAI-style error body.
+
+    A wrapped error keeps the reason in ``error.details`` — usually a JSON
+    string — while ``error.message`` says only that the backend failed. The
+    reason is the part an operator needs, so it is reported first and the
+    wrapper's own wording is kept alongside it.
+    """
     if not body:
         return ""
     try:
@@ -178,10 +240,19 @@ def _extract_error_message(body: str) -> str:
     if isinstance(parsed, dict):
         err = parsed.get("error")
         if isinstance(err, dict):
+            primary = ""
             for key in ("message", "detail", "type"):
                 value = err.get(key)
                 if isinstance(value, str) and value.strip():
-                    return value.strip()[:400]
+                    primary = value.strip()
+                    break
+            specific = _message_from_details(err.get("details"))
+            if specific:
+                if not primary or specific.lower() in primary.lower():
+                    return specific[:400]
+                return f"{specific} ({primary})"[:400]
+            if primary:
+                return primary[:400]
         if isinstance(err, str) and err.strip():
             return err.strip()[:400]
         for key in ("message", "detail"):

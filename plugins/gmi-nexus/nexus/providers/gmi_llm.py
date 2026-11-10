@@ -32,7 +32,13 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Sequence
 
-from ..errors import BadRequestError, ModelUnavailableError, NexusError, ValidationError
+from ..errors import (
+    BadRequestError,
+    ModelUnavailableError,
+    NexusError,
+    ValidationError,
+    is_retirement_message,
+)
 from ..http import HttpClient
 from ..models import ModelInfo, Usage
 
@@ -53,6 +59,21 @@ ENDPOINT_RESPONSES = "responses"
 #: malformed.
 IMAGE_PART = "image_url"
 TEXT_PART = "text"
+
+
+def _record_retirement(model_id: str, reason: str) -> None:
+    """Record that the provider will not serve a model any more.
+
+    The verdict goes into the plugin's own persistent data directory, never
+    into the installation directory. A storage fault must not turn one failed
+    call into a different failure, so it is swallowed.
+    """
+    try:
+        from .. import storage
+
+        storage.save_retired_model(model_id, reason)
+    except Exception:  # pragma: no cover - a storage fault must not break a call
+        pass
 
 
 @dataclass(slots=True)
@@ -201,7 +222,17 @@ class GmiLLMClient:
         )
         url = f"{self.base_url}/{self.endpoint}"
         started = time.perf_counter()
-        response = self.client.request("POST", url, headers=self._headers(), json_body=body)
+        try:
+            response = self.client.request(
+                "POST", url, headers=self._headers(), json_body=body
+            )
+        except NexusError as exc:
+            # A model the provider has retired can still be listed in the
+            # catalogue. When the refusal says so, the verdict is recorded,
+            # so the router stops choosing a model that cannot answer.
+            if is_retirement_message(str(exc)):
+                _record_retirement(model_id, str(exc))
+            raise
         elapsed = int((time.perf_counter() - started) * 1000)
 
         payload = response.json()

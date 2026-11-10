@@ -110,6 +110,13 @@ _SCHEMA: tuple[str, ...] = (
     )
     """,
     """
+    CREATE TABLE IF NOT EXISTS retired_models (
+        model_id    TEXT PRIMARY KEY,
+        reason      TEXT,
+        retired_at  REAL NOT NULL
+    )
+    """,
+    """
     CREATE TABLE IF NOT EXISTS usage_events (
         id          INTEGER PRIMARY KEY AUTOINCREMENT,
         ts          REAL NOT NULL,
@@ -524,6 +531,58 @@ def capability_probes(model_id: str | None = None) -> list[dict[str, Any]]:
         else:
             rows = conn.execute("SELECT * FROM capability_probes").fetchall()
     return [dict(row) for row in rows]
+
+
+# --------------------------------------------------------------------------- #
+# Retired models
+# --------------------------------------------------------------------------- #
+
+
+def save_retired_model(model_id: str, reason: str) -> None:
+    """Record that a model will not be served any more.
+
+    GMI's catalogue and the models that can actually be served are published
+    separately, so a retired model can keep its place in the catalogue. The
+    provider says so when it refuses to serve it, and that verdict is worth
+    keeping: routing to a retired model costs a round trip and returns
+    nothing, every time.
+    """
+    conn = open_connection()
+    with _LOCK:
+        conn.execute(
+            "INSERT OR REPLACE INTO retired_models (model_id, reason, retired_at) "
+            "VALUES (?,?,?)",
+            (model_id, reason[:500], time.time()),
+        )
+        conn.commit()
+
+
+def retired_models() -> list[dict[str, Any]]:
+    """Return every model the provider has said it will not serve."""
+    conn = open_connection()
+    with _LOCK:
+        rows = conn.execute(
+            "SELECT * FROM retired_models ORDER BY retired_at DESC"
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def is_retired_model(model_id: str) -> bool:
+    """Whether a model has been recorded as retired."""
+    conn = open_connection()
+    with _LOCK:
+        row = conn.execute(
+            "SELECT 1 FROM retired_models WHERE model_id=?", (model_id,)
+        ).fetchone()
+    return row is not None
+
+
+def clear_retired_model(model_id: str) -> None:
+    """Forget a retirement verdict, so the model is tried again."""
+    conn = open_connection()
+    with _LOCK:
+        conn.execute("DELETE FROM retired_models WHERE model_id=?", (model_id,))
+        conn.commit()
 
 
 # --------------------------------------------------------------------------- #

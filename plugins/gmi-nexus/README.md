@@ -20,7 +20,7 @@ Not against a mock. The plugin has been run against GMI Cloud itself — real
 inference, real vision, real image generation, and real code written and
 tested through Hermes' own tools.
 
-That is how **eight defects** surfaced which mocked tests could not find. Among
+That is how **ten defects** surfaced which mocked tests could not find. Among
 them: a catalogue model that answered `"456"` for a number it had never seen,
 which passed a capability probe written in a way that could be answered by
 luck; a code model whose replies came back cut off mid-JSON because the
@@ -29,12 +29,45 @@ when the request was at fault; a reported generation latency of 0.4
 seconds for a generation that had really taken half a minute, because the
 clock started after the queue had already done the work; and a rejected API
 key that was reported as an empty catalogue rather than as a rejected key.
-All eight are fixed and all eight have regression tests. The whole live
-exercise cost **just under $1** of the project's $10 ceiling.
+All ten are fixed and all ten have regression tests. The whole live
+exercise cost **just over $1** of the project's $10 ceiling.
+
+The last two came out of the final recorded run. GMI Cloud's catalogue still
+listed a code model the provider had already retired, so the router chose it,
+called it, and was refused with *"Backend request failed with status 400"* —
+the real reason, *"The requested model has been deprecated and is no longer
+available."*, was nested one level down and never reached the caller. NEXUS now
+reads the provider's own reason out of the error, reports it verbatim, and
+**remembers the verdict**: a model the provider has retired is not routed to
+again, and the run recovers on a different one. And a code reply that was
+*right* but wrote the newlines inside its JSON string literally was thrown away
+as unparseable; the parser now repairs that case rather than discarding good
+work, and the retry shows the model the reply that failed instead of asking the
+same bounded question again.
 
 [`docs/HERMES_VALIDATION.md`](docs/HERMES_VALIDATION.md) keeps four levels of
 verification apart — unit, mocked integration, live API, and a load inside a
 real Hermes install — and states plainly what has **not** been verified.
+
+---
+
+## The demo
+
+![A frame from the demo: the live transcript on the left, the generated image and the landing page on the right](../../docs/demo/gmi-nexus-demo-poster.jpg)
+
+**[Watch the 70-second demo](../../docs/demo/gmi-nexus-demo.mp4)** — 1920×1080,
+with narration.
+
+Every number in it came out of one real run against GMI Cloud, and nothing in
+it was drawn by hand. The terminal on the left is the run's own transcript, the
+numbers on the right are read out of the run's JSON, the image is the asset
+GMI generated during that run, and the landing page is the file the Dev Agent
+wrote and tested during that run — including the RECOVER, where a model the
+provider had retired is refused and the work moves to a different one.
+
+The video is a single continuous take: no cuts, no re-recordings, no
+reconstructions. The run behind it took **68.6 seconds**, and the video is
+**70.6**.
 
 ---
 
@@ -82,6 +115,12 @@ These are the rules the code is built around, not promises in a readme.
 * **No hard-coded model ids.** The catalogue is read live from
   `GET /v1/models` and the generation catalogue from
   `GET /apikey/models`.
+* **No model the provider has retired.** GMI Cloud publishes the catalogue
+  and the models it can actually serve separately, so a retired model can keep
+  its place in the catalogue. When the provider refuses one, NEXUS reads the
+  provider's *own* reason out of the error, reports it verbatim instead of a
+  generic "backend request failed", and remembers the verdict — the model is
+  not routed to again, and the work moves to a different one.
 * **No assumed vision.** A language model is never routed to an image task
   because its name looks promising. Vision capability comes from the
   catalogue's own metadata or from a probe that demonstrates the model can

@@ -264,6 +264,8 @@ class ModelInfo:
     capability_evidence: dict[str, str] = field(default_factory=dict)
     is_ready: bool = True
     is_free: bool = False
+    #: Why the model is not ready, when the provider has retired it.
+    retired_reason: str = ""
 
     @property
     def capability_set(self) -> set[Capability]:
@@ -284,6 +286,7 @@ class ModelInfo:
             "capability_evidence": dict(self.capability_evidence),
             "is_ready": self.is_ready,
             "is_free": self.is_free,
+            "retired_reason": self.retired_reason,
             "description": self.description,
         }
 

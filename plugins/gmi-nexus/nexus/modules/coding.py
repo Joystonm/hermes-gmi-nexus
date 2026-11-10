@@ -243,6 +243,17 @@ class DevAgent:
             attempt += 1
             outcome.attempts = attempt
 
+            # A model the provider retired during this run is not tried
+            # again: it cannot answer, and asking it twice costs a round
+            # trip and returns the same refusal.
+            candidates = [c for c in candidates if not self._is_retired(c.id)]
+            if not candidates:
+                outcome.error = (
+                    "every code-capable model in the catalogue has been retired "
+                    "by the provider"
+                )
+                break
+
             response = None
             for candidate in candidates:
                 estimate = self._estimate_cost(candidate, prompt, token_budget)
@@ -316,7 +327,12 @@ class DevAgent:
                     "this shape:\n"
                     '{{"files": [{{"path": "...", "content": "..."}}], "notes": "..."}}\n\n'
                     "The reply must be complete — a half-written file list is not "
-                    "usable. If the file is long, that is fine: send all of it."
+                    "usable. If the file is long, that is fine: send all of it.\n"
+                    "Inside the content string a newline has to be written as \\n and "
+                    "a double quote as \\\"; a JSON string cannot hold a raw newline "
+                    "or a raw quote.\n\n"
+                    "This is the reply that could not be parsed:\n\n"
+                    f"```\n{response.text[:3000]}\n```"
                 )
                 continue
 
@@ -470,18 +486,37 @@ class DevAgent:
             requests=1,
         )
 
+    @staticmethod
+    def _is_retired(model_id: str) -> bool:
+        """Whether the provider has already said it will not serve a model.
+
+        The verdict is kept in the plugin's own persistent data directory, so
+        it survives a restart and is not paid for twice. A storage fault must
+        never break a run, so it is treated as "not retired".
+        """
+        try:
+            from .. import storage
+
+            return storage.is_retired_model(model_id)
+        except Exception:  # pragma: no cover - a storage fault must not break a run
+            return False
+
     def _candidate_models(self, task: str) -> list[Any]:
         """Return the code-capable models for this task, best first.
 
         The catalogue marks a model as ready, but readiness is a claim: on
-        the live catalogue one of the published code models answers every
-        request with "Backend request failed with status 400". So the list
-        is a set of candidates and the Dev Agent tries them in turn.
+        the live catalogue one of the published code models has been retired
+        by the provider and answers every request with "Backend request
+        failed with status 400". So the list is a set of candidates and the
+        Dev Agent tries them in turn, and a model the provider has already
+        said is gone is not a candidate at all.
         """
         models = [
             model
             for model in self.registry.list_models()
-            if model.supports(Capability.TEXT) and model.supports(Capability.CODE)
+            if model.supports(Capability.TEXT)
+            and model.supports(Capability.CODE)
+            and not self._is_retired(model.id)
         ]
         if not models:
             models = [
@@ -531,6 +566,53 @@ def _parse_tool_result(raw: Any) -> Any:
         return {"raw": str(raw)}
 
 
+def _repair_json_strings(text: str) -> str:
+    """Escape raw control characters that sit inside JSON string literals.
+
+    A model asked for a whole file as a JSON string will sometimes write the
+    file's newlines literally instead of as ``\\n``. The answer is then right
+    and the JSON is not, and the strict parse throws away a good reply. This
+    repairs that one malformation and nothing else: a quote that was not
+    escaped stays a quote, because guessing where a string ends would be
+    guessing.
+    """
+    out: list[str] = []
+    in_string = False
+    escaped = False
+    for char in text:
+        if not in_string:
+            if char == '"':
+                in_string = True
+            out.append(char)
+            continue
+        if escaped:
+            escaped = False
+            out.append(char)
+            continue
+        if char == "\\":
+            escaped = True
+            out.append(char)
+            continue
+        if char == '"':
+            in_string = False
+            out.append(char)
+            continue
+        if char == "\n":
+            out.append("\\n")
+            continue
+        if char == "\r":
+            out.append("\\r")
+            continue
+        if char == "\t":
+            out.append("\\t")
+            continue
+        if ord(char) < 0x20:
+            out.append(f"\\u{ord(char):04x}")
+            continue
+        out.append(char)
+    return "".join(out)
+
+
 def _extract_json(raw: str) -> dict[str, Any] | None:
     """Pull a JSON object out of a model reply."""
     text = (raw or "").strip()
@@ -541,10 +623,19 @@ def _extract_json(raw: str) -> dict[str, Any] | None:
     end = text.rfind("}")
     if start == -1 or end <= start:
         return None
+    candidate = text[start : end + 1]
     try:
-        payload = json.loads(text[start : end + 1])
+        payload = json.loads(candidate)
     except (ValueError, TypeError):
-        return None
+        payload = None
+    if payload is None:
+        # The strict parse failed. Before giving up on the reply, try the one
+        # repair that is safe: newlines and tabs written literally inside a
+        # JSON string.
+        try:
+            payload = json.loads(_repair_json_strings(candidate))
+        except (ValueError, TypeError):
+            payload = None
     return payload if isinstance(payload, dict) else None
 
 

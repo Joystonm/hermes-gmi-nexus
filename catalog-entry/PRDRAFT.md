@@ -11,6 +11,7 @@ actually ran, what it cost and what failed.
 - **Subdirectory:** `plugins/gmi-nexus`
 - **Maintainer:** Joystonm
 - **Category:** `models` · **Tier:** `community` · **Requires Hermes:** `>=0.21.6`
+- **Demo:** [`docs/demo/gmi-nexus-demo.mp4`](https://github.com/Joystonm/hermes-gmi-nexus/blob/b4c38f2e6c850ce295fa76265e3b68ed630f26ba/docs/demo/gmi-nexus-demo.mp4) — 70 seconds, one continuous live run, with narration. Every number in it came out of that run; nothing in it was drawn by hand.
 
 ## What this plugin does
 
@@ -111,8 +112,8 @@ Four levels, kept separate; see the plugin's
 ### What the live run found that the mocked tests could not
 
 Worth saying plainly, because it is the argument for running a plugin
-against the real service rather than only against a mock. Eight defects were
-found this way and all eight are fixed:
+against the real service rather than only against a mock. Ten defects were
+found this way and all ten are fixed:
 
 * the multimodal message part was spelled the Anthropic way (`image`)
   instead of the OpenAI-compatible way (`image_url`), which some models
@@ -144,8 +145,27 @@ found this way and all eight are fixed:
   had recorded the reason; nothing carried it forward. The error now reaches
   every place that reports an empty catalogue, and both demo scripts stop
   rather than run against a catalogue that was never fetched;
+* a model the provider had **retired** was still routable, and the provider's
+  real reason was swallowed. GMI Cloud publishes the catalogue and the models
+  it can actually serve separately, so a deprecated model keeps its place in
+  the catalogue. The router chose it, called it, and was refused with a
+  generic *"Backend request failed with status 400"* — while the actual
+  reason, *"The requested model has been deprecated and is no longer
+  available."*, sat one level down in the error body and never reached the
+  caller. The plugin now reads the provider's own reason out of the error,
+  reports it verbatim, and **remembers the verdict**: a model the provider
+  has retired is not routed to again, and the work recovers on a different
+  one. The demo video shows this happening;
+* a code reply that was *right* but wrote the newlines inside its JSON
+  string literally was discarded as unparseable, and the retry prompt did
+  not show the model the reply that had failed — so it repeated the same
+  malformed answer. The parser now repairs raw newlines inside JSON string
+  literals instead of throwing the work away, and the retry carries the
+  model's own unusable reply, the exact shape it must use, and the rule
+  that a newline inside a string is written as `\n`.
 
-Each has a regression test.
+Each has a regression test — fourteen of them for the last two alone, in
+`tests/test_resilience.py`.
 
 ## The card
 
@@ -209,5 +229,5 @@ and say why. It never shows a number NEXUS did not measure.
   the only thing in the repository that needs a third-party package (Pillow),
   it is not in the plugin payload, and the plugin itself still imports nothing
   but the standard library.
-* The one-off scripts that found seven of the eight defects live in `scripts/probes/`,
+* The one-off scripts that found seven of the ten defects live in `scripts/probes/`,
   outside the plugin, each documented in that directory's README.

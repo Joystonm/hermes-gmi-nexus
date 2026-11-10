@@ -367,7 +367,35 @@ class ModelRegistry:
             self._fetched_at = time.time()
             self._last_error = "; ".join(errors) if errors else None
         self._restore_probes()
+        self._restore_retired()
         return self.summary()
+
+    def _restore_retired(self) -> None:
+        """Mark models the provider has retired as not ready.
+
+        GMI's catalogue and the models it can actually serve are published
+        separately, so a retired model keeps its place in the catalogue and
+        the router would otherwise choose it, call it, and be refused. Once
+        the provider has said a model is gone, that verdict is kept in the
+        plugin's own data directory and re-applied on every catalogue read.
+        """
+        from . import storage
+
+        try:
+            recorded = storage.retired_models()
+        except Exception:  # pragma: no cover - a storage fault must not
+            return  # break the catalogue read
+
+        with self._lock:
+            for row in recorded:
+                model_id = str(row.get("model_id") or "")
+                info = self._models.get(model_id)
+                if info is None:
+                    continue
+                info.is_ready = False
+                info.retired_reason = str(
+                    row.get("reason") or "the provider retired this model"
+                )
 
     def _restore_probes(self) -> None:
         """Re-apply recorded probe outcomes to the freshly read catalogue.
