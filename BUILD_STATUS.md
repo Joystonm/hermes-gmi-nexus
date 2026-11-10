@@ -671,26 +671,28 @@ claimed.
 
 ### The catalog entry
 
-`catalog-entry/gmi-nexus.yaml` is prepared but **cannot be finalised**: rule 2
-of the catalog's admission policy requires an exact 40-character commit SHA,
-and that SHA does not exist until the repository is committed and pushed. The
-entry is therefore written with `SHA` and `OWNER` placeholders, and the
-procedure for filling them in is documented in
+`catalog-entry/gmi-nexus.yaml` is finalised. Rule 2 of the catalog's
+admission policy requires an exact 40-character commit SHA, and the entry
+pins the commit that carries the tested plugin payload and the images. It is
+a real commit in this repository's history, so the entry resolves once the
+repository is pushed. The SHA itself is in the entry file — it is not written
+here, because a document that is part of the payload cannot name the SHA of
+the commit that contains it. The procedure is documented in
 [`plugins/gmi-nexus/docs/HERMES_VALIDATION.md`](plugins/gmi-nexus/docs/HERMES_VALIDATION.md).
-The PR description that would accompany it is `catalog-entry/PRDRAFT.md`.
+The PR description that accompanies it is `catalog-entry/PRDRAFT.md`.
 
 The entry declares:
 
 ```yaml
 name: gmi-nexus
-repo: https://github.com/<owner>/hermes-gmi-nexus
-sha: "<40-char commit sha>"
+repo: https://github.com/Joystonm/hermes-gmi-nexus
+sha: <the commit that carries the payload>
 subdir: plugins/gmi-nexus
 requires_hermes: ">=0.21.6"
 version: "1.0.0"
-image: https://raw.githubusercontent.com/<owner>/hermes-gmi-nexus/<sha>/docs/banner.png
+image: https://raw.githubusercontent.com/Joystonm/hermes-gmi-nexus/<sha>/docs/banner.png
 screenshots:
-  - https://raw.githubusercontent.com/<owner>/hermes-gmi-nexus/<sha>/docs/screenshots/nexus-01-overview.png
+  - https://raw.githubusercontent.com/Joystonm/hermes-gmi-nexus/<sha>/docs/screenshots/nexus-01-overview.png
   - ... five more, one per dashboard section ...
 readme: true
 capabilities:
@@ -708,8 +710,10 @@ why `hermes plugins validate` reports **no** private-core-import warning.
 
 The pin appears in four places — `sha:`, `docs_url`, `image:` and all six
 `screenshots:` URLs — and they must name the same commit, or the card would
-show a picture of a different version than the code it describes. The
-placeholders make that one substitution.
+show a picture of a different version than the code it describes. The pin is
+deliberately not the branch head: it freezes one tested version, and the
+commit that records it comes after, because a file cannot contain the SHA of
+the commit that contains it.
 
 ---
 

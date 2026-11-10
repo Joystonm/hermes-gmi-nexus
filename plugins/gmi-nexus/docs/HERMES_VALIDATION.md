@@ -399,9 +399,9 @@ Dev Agent losing the task on a retry — are set out under *Level 3* above.
 
 ## The catalog entry
 
-The entry that goes into the Hermes plugin catalog is prepared at
+The entry that goes into the Hermes plugin catalog is finalised at
 `catalog-entry/gmi-nexus.yaml` in this repository, and the PR description that
-would accompany it is at `catalog-entry/PRDRAFT.md`. Neither is inside the
+accompanies it is at `catalog-entry/PRDRAFT.md`. Neither is inside the
 plugin payload — the catalog entry belongs to the *Hermes* repository, not to
 this one.
 
@@ -420,11 +420,10 @@ development script at the repository root imported Hermes' plugin manager
 directly. Moving the script out of the scanned payload removed the warning
 without any suppression, and `hermes plugins validate` now reports none.
 
-### Why the entry cannot be finalised yet
+### How the entry was pinned
 
-Rule 2 of the policy requires an exact 40-character commit SHA. That SHA does
-not exist until this repository is committed and pushed, so the entry carries a
-placeholder and the procedure for filling it in is:
+Rule 2 of the policy requires an exact 40-character commit SHA. The entry pins
+the commit that carries the tested payload and the images. The procedure was:
 
 1. Commit and push the repository.
 2. `git rev-parse HEAD` — take the 40-character result.
@@ -432,8 +431,15 @@ placeholder and the procedure for filling it in is:
 4. Open the PR against the Hermes repository with `catalog-entry/PRDRAFT.md` as
    the description.
 
-A SHA bump is a new PR, never an edit to a merged entry — the policy is
-explicit that the pin never moves under a reader's feet.
+The SHA is not written here: this file is inside the plugin payload, and a
+file cannot contain the SHA of the commit that contains it. It is in
+`catalog-entry/gmi-nexus.yaml`, and in the PR description.
+
+The pin is deliberately not the branch head. It freezes one tested version,
+and the commit that records it comes after, because a file cannot contain the
+SHA of the commit that contains it. A SHA bump is a new PR, never an edit to a
+merged entry — the policy is explicit that the pin never moves under a
+reader's feet.
 
 ### The capabilities the entry declares
 
