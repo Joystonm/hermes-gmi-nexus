@@ -3,10 +3,13 @@
 # This is the file the pull request adds. It is added to
 # NousResearch/hermes-agent under plugin-catalog/gmi-nexus.yaml.
 #
-# It pins commit 2f7f79350ac894c77a3db2cb8dd56b714d4b964a of
+# It pins commit 23e897b06b017873c2d31cb7ea9ad72f2b08999f of
 # https://github.com/Joystonm/hermes-gmi-nexus
 # and installs the plugin from the plugins/gmi-nexus subdirectory of that
-# commit. The images are pinned to the same commit, so the card can never
+# commit. That commit carries the tested plugin payload and the images.
+# The commit after it adds only this copy of the entry, so the pin is one
+# behind HEAD by design: the pin freezes a version, it does not track a
+# branch. The images are pinned to the same commit, so the card can never
 # show a picture of a different version than the code it describes.
 #
 # The pin appears in four places — `sha:`, `docs_url`, `image:` and every
@@ -24,7 +27,7 @@
 
 name: gmi-nexus
 repo: https://github.com/Joystonm/hermes-gmi-nexus
-sha: 2f7f79350ac894c77a3db2cb8dd56b714d4b964a
+sha: 23e897b06b017873c2d31cb7ea9ad72f2b08999f
 subdir: plugins/gmi-nexus
 title: GMI NEXUS
 description: >-
@@ -46,16 +49,16 @@ maintainer: Joystonm
 tier: community
 category: models
 requires_hermes: ">=0.21.6"
-docs_url: https://github.com/Joystonm/hermes-gmi-nexus/blob/2f7f79350ac894c77a3db2cb8dd56b714d4b964a/plugins/gmi-nexus/README.md
+docs_url: https://github.com/Joystonm/hermes-gmi-nexus/blob/23e897b06b017873c2d31cb7ea9ad72f2b08999f/plugins/gmi-nexus/README.md
 version: "1.0.0"
-image: https://raw.githubusercontent.com/Joystonm/hermes-gmi-nexus/2f7f79350ac894c77a3db2cb8dd56b714d4b964a/docs/banner.png
+image: https://raw.githubusercontent.com/Joystonm/hermes-gmi-nexus/23e897b06b017873c2d31cb7ea9ad72f2b08999f/docs/banner.png
 screenshots:
-  - https://raw.githubusercontent.com/Joystonm/hermes-gmi-nexus/2f7f79350ac894c77a3db2cb8dd56b714d4b964a/docs/screenshots/nexus-01-overview.png
-  - https://raw.githubusercontent.com/Joystonm/hermes-gmi-nexus/2f7f79350ac894c77a3db2cb8dd56b714d4b964a/docs/screenshots/nexus-02-model-intelligence.png
-  - https://raw.githubusercontent.com/Joystonm/hermes-gmi-nexus/2f7f79350ac894c77a3db2cb8dd56b714d4b964a/docs/screenshots/nexus-03-arena.png
-  - https://raw.githubusercontent.com/Joystonm/hermes-gmi-nexus/2f7f79350ac894c77a3db2cb8dd56b714d4b964a/docs/screenshots/nexus-04-execution.png
-  - https://raw.githubusercontent.com/Joystonm/hermes-gmi-nexus/2f7f79350ac894c77a3db2cb8dd56b714d4b964a/docs/screenshots/nexus-05-multimodal.png
-  - https://raw.githubusercontent.com/Joystonm/hermes-gmi-nexus/2f7f79350ac894c77a3db2cb8dd56b714d4b964a/docs/screenshots/nexus-06-settings.png
+  - https://raw.githubusercontent.com/Joystonm/hermes-gmi-nexus/23e897b06b017873c2d31cb7ea9ad72f2b08999f/docs/screenshots/nexus-01-overview.png
+  - https://raw.githubusercontent.com/Joystonm/hermes-gmi-nexus/23e897b06b017873c2d31cb7ea9ad72f2b08999f/docs/screenshots/nexus-02-model-intelligence.png
+  - https://raw.githubusercontent.com/Joystonm/hermes-gmi-nexus/23e897b06b017873c2d31cb7ea9ad72f2b08999f/docs/screenshots/nexus-03-arena.png
+  - https://raw.githubusercontent.com/Joystonm/hermes-gmi-nexus/23e897b06b017873c2d31cb7ea9ad72f2b08999f/docs/screenshots/nexus-04-execution.png
+  - https://raw.githubusercontent.com/Joystonm/hermes-gmi-nexus/23e897b06b017873c2d31cb7ea9ad72f2b08999f/docs/screenshots/nexus-05-multimodal.png
+  - https://raw.githubusercontent.com/Joystonm/hermes-gmi-nexus/23e897b06b017873c2d31cb7ea9ad72f2b08999f/docs/screenshots/nexus-06-settings.png
 readme: true
 known_issues:
   - The dashboard tab needs Hermes' web extra: pip install "hermes-agent[web]".
