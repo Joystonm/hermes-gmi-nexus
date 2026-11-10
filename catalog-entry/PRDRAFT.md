@@ -1,16 +1,18 @@
-# Catalog PR — GMI NEXUS
-
-> **Draft.** Every `SHA`, `OWNER` and `REPLACE-ME` below must be filled in once the
-> repository is pushed. Rule 2 requires an exact 40-character commit SHA, and
-> the PR must add **one** file: `plugin-catalog/gmi-nexus.yaml`.
-
-## What this plugin does
+# Add GMI NEXUS to the plugin catalog
 
 GMI NEXUS is an adaptive intelligence and orchestration layer for Hermes Agent
 over the GMI Cloud model catalogue. It turns one goal into a coordinated
 multi-model workflow through an eight-step pipeline — **UNDERSTAND → PLAN →
 ROUTE → EXECUTE → EVALUATE → RECOVER → LEARN → REPORT** — and reports what
 actually ran, what it cost and what failed.
+
+- **Repository:** https://github.com/Joystonm/hermes-gmi-nexus
+- **Pinned commit:** `c9a50c775012f20bcbd587d2874b0902edbed161`
+- **Subdirectory:** `plugins/gmi-nexus`
+- **Maintainer:** Joystonm
+- **Category:** `models` · **Tier:** `community` · **Requires Hermes:** `>=0.21.6`
+
+## What this plugin does
 
 It registers eight tools and one command:
 
@@ -94,12 +96,12 @@ Four levels, kept separate; see the plugin's
    wrote is really on disk and really passes its test.
 3. **Live API** — the catalogue reads, a paid chat completion, a multimodal
    completion carrying a real image, image generations through the request
-   queue, and the whole demo scenario have all been run against the
-   real service with a real credential. The live test suite exists, is
+   queue, and the whole demo scenario have all been run against the real
+   service with a real credential. The live test suite exists, is
    opt-in behind `GMI_LIVE_TESTS=1`, and every live figure quoted anywhere
    in this repository is an **estimate priced at the catalogue's published
    rates** — GMI's usage block reports token counts and no dollar amount, so
-   no billed total is claimed. The whole live exercise cost about **$0.87**
+   no billed total is claimed. The whole live exercise cost about **$0.94**
    of the project's $10 ceiling.
 4. **Hermes plugin** — `hermes plugins validate ./plugins/gmi-nexus
    --install-deps` passes with a `safe` security scan, and
@@ -182,8 +184,10 @@ and say why. It never shows a number NEXUS did not measure.
   is about to spend before it spends it.
 * `scripts/demo_video.py` is the same plugin on the same real service in five
   phases — catalogue, generate, see, build, report — arranged so the whole
-  thing finishes inside the ninety seconds the demo video is allowed. The
-  measured run comes in at **69.3 seconds**. The time budget was measured
+  thing finishes inside the ninety seconds the demo video is allowed. Three
+  measured runs came in at **69.3**, **53.4** and **76.0 seconds** — every one
+  of them inside the limit, and the spread between them is the request queue's,
+  not the plugin's. The time budget was measured
   rather than guessed: `scripts/probes/probe_code_speed.py` measured the code
   models and `scripts/probes/probe_image_speed.py` measured the image models,
   and the video script expresses both results through the plugin's own
@@ -191,7 +195,9 @@ and say why. It never shows a number NEXUS did not measure.
   for the image model's own default rather than pretending a cheaper quality
   tier is a faster one. Across seven real generations the time was 14.5 s,
   17.1 s, 17.9 s, 19.3 s, 20.3 s, 21.3 s and one 109.7 s outlier, when the
-  queue held the request for a minute and a half.
+  queue held the request for a minute and a half. The two runs that were
+  recorded reported their own generation at 19.0 s and 22.3 s — the time the
+  caller actually waited, which is the figure the latency fix restored.
 * The live run's RECOVER section **reconciles the published route against
   the route that was actually taken**, out loud. On the live catalogue the
   published code model answers every request with a 400, so the model that
@@ -204,23 +210,3 @@ and say why. It never shows a number NEXUS did not measure.
   but the standard library.
 * The one-off scripts that found seven of the eight defects live in `scripts/probes/`,
   outside the plugin, each documented in that directory's README.
-
-## Checklist
-
-- [ ] The repository is public.
-- [ ] No bytecode is staged. Running the tests writes `__pycache__` back into
-      the plugin directory; `.gitignore` excludes it, but check the staged
-      tree (`git status`) and confirm the payload gate passes:
-      `python scripts/scan_plugin_payloads.py plugins/gmi-nexus`.
-- [ ] The commit is pushed and its 40-character SHA replaces every `SHA` in
-      `catalog-entry/gmi-nexus.yaml` — in `sha:`, in `docs_url`, in `image:`
-      and in all six `screenshots:` URLs.
-- [ ] `OWNER` is replaced with the repository owner, in the entry's `repo:`,
-      in `docs_url`, in `image:`, in the `screenshots:` URLs, and in the
-      `homepage:` field of `plugin.yaml`.
-- [ ] `maintainer:` names the maintainer.
-- [ ] `docs_url` points at the plugin README **at that SHA**.
-- [ ] `plugin-catalog/gmi-nexus.yaml` is the only file this PR adds.
-- [ ] The `capabilities:` block matches what the plugin registers — it is
-      checked against the pinned commit by the admission CI.
-- [ ] The PR description carries the disclosure above.
