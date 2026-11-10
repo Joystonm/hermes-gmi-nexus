@@ -38,6 +38,7 @@ from .models import (
 )
 from .providers.gmi_llm import GmiLLMClient
 from .providers.gmi_media import GmiMediaClient
+from .registry import catalogue_error_suffix
 
 #: The system prompt NEXUS gives its own steps.
 SYSTEM_PROMPT = (
@@ -277,6 +278,7 @@ class Executor:
                 "message": (
                     f"no model in the live catalogue satisfies {step.task_type.value}: "
                     + ", ".join(sorted(c.value for c in self._required(step)))
+                    + catalogue_error_suffix(self.registry)
                 ),
             }
             return

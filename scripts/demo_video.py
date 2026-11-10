@@ -300,6 +300,17 @@ def main(argv: list[str] | None = None) -> int:
         catalogue = analysis.get("catalogue") or {}
         reel.field("language models", catalogue.get("llm_models"))
         reel.field("generation models", catalogue.get("media_models"))
+        # A catalogue that could not be read is not an empty catalogue. The
+        # reel says so and stops, rather than recording ninety seconds of
+        # "no eligible model" that looks like a fact about GMI Cloud.
+        catalogue_error = catalogue.get("error")
+        if catalogue_error:
+            reel.field("catalogue error", catalogue_error)
+            raise SystemExit(
+                f"\nThe catalogue could not be read, so there is nothing real to "
+                f"record.\n  {catalogue_error}\n\n"
+                "Check GMI_API_KEY and the network, then run this again."
+            )
         budget = analysis.get("budget") or {}
         reel.field(
             "limits",

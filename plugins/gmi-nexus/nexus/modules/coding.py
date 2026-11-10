@@ -25,6 +25,7 @@ from ..budget import BudgetGuard
 from ..config import Settings
 from ..errors import NexusError, ValidationError
 from ..models import Capability, TaskType
+from ..registry import catalogue_error_suffix
 
 #: The prompt used to request an implementation.
 IMPLEMENT_PROMPT = (
@@ -219,7 +220,10 @@ class DevAgent:
         outcome = DevOutcome(ok=False)
         candidates = self._candidate_models(task)
         if not candidates:
-            outcome.error = "no code-capable model is available in the live catalogue"
+            outcome.error = (
+                "no code-capable model is available in the live catalogue"
+                + catalogue_error_suffix(self.registry)
+            )
             return outcome
 
         started = time.perf_counter()
@@ -369,7 +373,11 @@ class DevAgent:
             raise ValidationError("the review needs at least one file")
         candidates = self._candidate_models("code review")
         if not candidates:
-            return DevOutcome(ok=False, error="no code-capable model is available")
+            return DevOutcome(
+                ok=False,
+                error="no code-capable model is available"
+                + catalogue_error_suffix(self.registry),
+            )
 
         contents: list[tuple[str, str]] = []
         for path in paths:

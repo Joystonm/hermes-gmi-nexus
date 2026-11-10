@@ -29,6 +29,7 @@ from ..budget import BudgetGuard
 from ..config import Settings
 from ..errors import NexusError, ValidationError
 from ..models import Modality
+from ..registry import catalogue_error_suffix
 
 #: The semantic options the engine understands.
 SUPPORTED_OPTIONS = (
@@ -165,7 +166,11 @@ class CreativeEngine:
                 ok=False,
                 modality=modality,
                 status="no_candidate",
-                error=reasons or "no media model was available for this request",
+                error=(
+                    reasons
+                    or "no media model was available for this request"
+                    + catalogue_error_suffix(self.registry)
+                ),
                 candidates=[c.to_dict() for c in considered],
             )
 

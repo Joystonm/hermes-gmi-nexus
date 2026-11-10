@@ -515,9 +515,25 @@ class ModelRegistry:
         self.client.close()
 
 
+def catalogue_error_suffix(registry: Any) -> str:
+    """Return a suffix naming the catalogue error, when there was one.
+
+    An empty catalogue and a catalogue that could not be read are two
+    different states. Reporting the first as the second turns an
+    authentication or transport fault into "no model satisfies this task",
+    which reads like a fact about the catalogue rather than a fault in the
+    request that was made of it.
+    """
+    error = getattr(registry, "last_error", None)
+    if not error:
+        return ""
+    return f" — the catalogue could not be read: {error}"
+
+
 __all__ = [
     "CATALOGUE_TTL_SECONDS",
     "ModelRegistry",
+    "catalogue_error_suffix",
     "classify_media_modality",
     "infer_capabilities",
     "parse_model_record",

@@ -7,6 +7,7 @@ import pytest
 from nexus.models import PROBE_VERIFIED_PREFIX, Capability, Modality, probe_verdict
 from nexus.registry import (
     ModelRegistry,
+    catalogue_error_suffix,
     classify_media_modality,
     infer_capabilities,
     parse_model_record,
@@ -100,6 +101,38 @@ def test_a_failing_catalogue_is_reported_not_hidden(settings):
     assert models == []
     assert registry.last_error is not None
     assert "llm catalogue" in registry.last_error
+
+
+def test_a_catalogue_that_could_not_be_read_is_not_reported_as_an_empty_one(settings):
+    """A failed catalogue read must reach the caller as a failure, not a fact.
+
+    An empty catalogue and a catalogue that could not be read are two
+    different states. When the read fails, "no model satisfies this task"
+    is a statement about the request that was made, not about GMI Cloud.
+    """
+    from nexus.http import HttpResponse
+
+    class BrokenTransport(FakeTransport):
+        def request(self, method, url, **kwargs):
+            return HttpResponse(status=401, body="unauthorized")
+
+    registry = ModelRegistry(
+        settings, HttpClient(transport=BrokenTransport(), max_retries=0)
+    )
+    assert registry.list_models() == []
+    assert registry.last_error is not None
+
+    suffix = catalogue_error_suffix(registry)
+    assert "the catalogue could not be read" in suffix
+    assert registry.last_error in suffix
+
+
+def test_a_healthy_catalogue_adds_nothing_to_the_message(settings):
+    """When the catalogue read fine, the message stays exactly as it was."""
+    registry = ModelRegistry(settings, HttpClient(transport=FakeTransport(), max_retries=0))
+    registry.list_models()
+    assert registry.last_error is None
+    assert catalogue_error_suffix(registry) == ""
 
 
 def test_media_modality_is_derived_from_the_model_id():

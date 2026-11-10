@@ -657,6 +657,19 @@ class Runner:
         catalogue = analysis.get("catalogue") or {}
         self.field("language models", catalogue.get("llm_models"))
         self.field("generation models", catalogue.get("media_models"))
+        # An empty catalogue and a catalogue that could not be read are two
+        # different states. Say which one this is, and stop if the read
+        # failed — running the pipeline against a catalogue that was never
+        # fetched would report "no eligible model" for every step, which
+        # reads like a fact about GMI Cloud rather than a fault here.
+        catalogue_error = catalogue.get("error")
+        if catalogue_error:
+            self.field("catalogue error", catalogue_error)
+            raise SystemExit(
+                "\nThe catalogue could not be read, so nothing below would be real.\n"
+                f"  {catalogue_error}\n\n"
+                "Check GMI_API_KEY and the network, then run this again."
+            )
         budget = analysis.get("budget") or {}
         self.field(
             "limits",
