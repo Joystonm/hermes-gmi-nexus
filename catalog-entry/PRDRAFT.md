@@ -7,11 +7,11 @@ ROUTE → EXECUTE → EVALUATE → RECOVER → LEARN → REPORT** — and report
 actually ran, what it cost and what failed.
 
 - **Repository:** https://github.com/Joystonm/hermes-gmi-nexus
-- **Pinned commit:** `829fec1a816a7a7d36bdef8e73987688f5a3397c`
+- **Pinned commit:** `c1b2c105b4485194f31f1037f953e76537d8ad19`
 - **Subdirectory:** `plugins/gmi-nexus`
 - **Maintainer:** Joystonm
 - **Category:** `models` · **Tier:** `community` · **Requires Hermes:** `>=0.21.6`
-- **Demo:** [`docs/demo/gmi-nexus-demo.mp4`](https://github.com/Joystonm/hermes-gmi-nexus/blob/829fec1a816a7a7d36bdef8e73987688f5a3397c/docs/demo/gmi-nexus-demo.mp4) — 80 seconds, one continuous live run, with narration. Every number in it came out of that run; nothing in it was drawn by hand.
+- **Demo:** [`docs/demo/gmi-nexus-demo.mp4`](https://github.com/Joystonm/hermes-gmi-nexus/blob/c1b2c105b4485194f31f1037f953e76537d8ad19/docs/demo/gmi-nexus-demo.mp4) — 80 seconds, one continuous live run, with narration. Every number in it came out of that run; nothing in it was drawn by hand.
 
 ## What this plugin does
 
