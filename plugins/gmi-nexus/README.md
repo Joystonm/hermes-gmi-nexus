@@ -142,10 +142,16 @@ These are the rules the code is built around, not promises in a readme.
   environment.
 * **No unbounded spending.** A per-run ceiling, a rolling daily ceiling and an
   approval threshold are enforced before a request is submitted — including
-  by the Dev Agent.
+  by the Dev Agent. The model cannot approve its own spend: a call that
+  reaches the threshold is held for a person through Hermes' own approval
+  prompt, and a call whose cost cannot be worked out is always held.
 * **No secrets in the plugin.** The GMI Cloud key is read through Hermes' secret
   scope. It is never written into the plugin directory, never logged and never
   included in a dashboard response.
+* **No unchecked paths or URLs.** A local file the model names is resolved and
+  checked by extension *and* by its bytes before it is read, and is never read
+  from inside Hermes' home directory. A remote URL the model names is resolved
+  and checked on every redirect hop, and an internal address is refused.
 
 ---
 
@@ -173,11 +179,35 @@ What a user should know before installing.
 * **Sends no telemetry.** Nothing is sent anywhere except GMI Cloud, and only
   as part of a request the agent asked for.
 * **Spends money, within limits.** A per-run ceiling, a rolling daily ceiling
-  and an approval threshold are enforced *before* a request is submitted; a
-  request estimated above the threshold is refused unless the caller approves
-  it. The figures NEXUS reports are the provider's reported usage priced at the
-  catalogue's published rates, and they are labelled as estimates — never as a
-  bill.
+  and an approval threshold are enforced *before* a request is submitted. A
+  request estimated at or above the threshold is **held for a person**: NEXUS
+  hands it to Hermes' own approval prompt, and only the person answering that
+  prompt unlocks it. There is no `approve` argument in any of NEXUS' tool
+  schemas, and no way for the model to approve its own spend — the approval
+  rule is per tool, so allowing one tool does not allow another. A request
+  whose cost cannot be worked out — because the catalogue publishes no price
+  for the model — is always held; an unknown cost is never treated as a zero
+  cost. The figures NEXUS reports are the provider's reported usage priced at
+  the catalogue's published rates, and they are labelled as estimates — never
+  as a bill.
+* **Reads local files the model names.** `nexus_media` and `nexus_vision` take
+  an image or a mask, and a model can put a path in either. NEXUS checks the
+  path before opening it: the path is resolved (so a symlink is followed to
+  where it really points), the file must be a regular file, its extension must
+  name an image type **and** its first bytes must be that image type, and it
+  must live in the working directory, NEXUS' own plugin-data directory or the
+  system temporary directory. A file inside Hermes' home directory — where the
+  profile's `.env` and every other secret lives — is never read and never
+  sent. A file that fails any of these checks is refused, and nothing is
+  uploaded.
+* **Fetches remote images the model names.** To inline an image, NEXUS
+  downloads it, and the URL came from a model, so it is checked rather than
+  trusted: every hop of the redirect chain is resolved, and every address must
+  be a public one. Private, loopback, link-local, reserved and multicast
+  addresses are refused — `169.254.169.254` among them — as is a host that
+  cannot be resolved at all. The image type comes from the bytes, not from the
+  server's `Content-Type`. A refused URL is a refusal, not a failed download:
+  NEXUS does not fall back on sending it along.
 * **May send a probe image.** To verify that a model can actually read an
   image, NEXUS may send it a small probe picture — a randomly drawn
   three-digit number — and ask it to read the number back. That is a real

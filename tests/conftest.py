@@ -289,6 +289,7 @@ class FakeTransport:
         data: Any = None,
         files: Any = None,
         timeout: float = 60.0,
+        follow_redirects: bool = True,
     ) -> HttpResponse:
         chat_index = len(self.chat_requests()) if url.endswith("/chat/completions") else 0
         self.requests.append(
@@ -483,6 +484,7 @@ class FakeContext:
     def __init__(self) -> None:
         self.tools: dict[str, dict[str, Any]] = {}
         self.commands: dict[str, dict[str, Any]] = {}
+        self.hooks: dict[str, list[Any]] = {}
         self.config: dict[str, Any] = {}
         self.dispatched: list[tuple[str, dict[str, Any]]] = []
         self.tool_responses: dict[str, Any] = {}
@@ -503,7 +505,8 @@ class FakeContext:
     def register_command(self, name, handler, description="", args_hint="", argument_mode=None):
         self.commands[name] = {"handler": handler, "description": description}
 
-    def register_hook(self, *args, **kwargs):
+    def register_hook(self, hook_name, callback, **kwargs):
+        self.hooks.setdefault(hook_name, []).append(callback)
         return None
 
     def register_middleware(self, *args, **kwargs):

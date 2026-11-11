@@ -20,6 +20,19 @@ from nexus.http import HttpClient
 from conftest import ORIGINAL_RANDOM_PROBE_NUMBER, PROBE_NUMBER, FakeTransport, _is_probe_request
 
 
+@pytest.fixture(autouse=True)
+def _public_dns(monkeypatch):
+    """Answer name resolution with a public address.
+
+    NEXUS resolves a host and checks the address before it fetches it, so a
+    test that hands it a URL needs a resolver it controls. The tests that
+    are about a private address replace this themselves.
+    """
+    from nexus import netguard
+
+    monkeypatch.setattr(netguard, "resolve_host", lambda host, port: ["93.184.216.34"])
+
+
 def _vision(settings, transport, ctx=None) -> VisionModule:
     from nexus.budget import BudgetGuard
     from nexus.registry import ModelRegistry

@@ -499,3 +499,111 @@ def test_a_broken_catalogue_is_reported_not_hidden(stubbed, monkeypatch):
     assert payload["catalogue_error"]
     assert "refused the connection" in payload["catalogue_error"]
     assert model.id  # the stub catalogue itself is intact
+
+
+# --------------------------------------------------------------------------- #
+# The bundle the manifest points at
+# --------------------------------------------------------------------------- #
+#
+# The manifest names ``dist/index.js`` and ``dist/style.css``. A manifest
+# pointing at a file that is not in the repository renders a blank tab, so
+# these tests check that the files are there, that they are the ones the
+# build produces, and that nothing ignores them out of the repository.
+
+
+#: The dashboard folder.
+DASHBOARD = Path(__file__).resolve().parents[1] / "plugins" / "gmi-nexus" / "dashboard"
+
+
+@pytest.fixture(scope="module")
+def dashboard_build():
+    """The dashboard's build script, loaded as a module."""
+    spec = importlib.util.spec_from_file_location(
+        "gmi_nexus_dashboard_build_under_test", DASHBOARD / "build.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_the_manifest_points_at_files_that_exist():
+    """Every file the manifest names has to be in the repository."""
+    spec = json.loads((DASHBOARD / "manifest.json").read_text(encoding="utf-8"))
+
+    for key in ("entry", "css", "api"):
+        name = str(spec.get(key) or "")
+        assert name, f"the manifest has no {key}"
+        assert (DASHBOARD / name).is_file(), (
+            f"the manifest points at {name}, which does not exist — the "
+            "dashboard tab would not render"
+        )
+
+
+def test_the_bundle_ships_with_the_plugin():
+    """The built files are there, not just the sources that build them."""
+    for name in ("index.js", "style.css"):
+        assert (DASHBOARD / "dist" / name).is_file()
+        assert (DASHBOARD / "src" / name).is_file()
+
+
+def test_the_build_is_up_to_date(dashboard_build):
+    """``dist/`` is what ``src/`` builds.
+
+    A bundle that has drifted from its source is a bundle nobody can
+    maintain, so the build script can check it and this test runs that
+    check.
+    """
+    assert dashboard_build.check() == 0, (
+        "the committed bundle is out of date — run 'python dashboard/build.py'"
+    )
+
+
+def test_the_build_reproduces_the_committed_bundle(dashboard_build, tmp_path):
+    """Building again produces exactly the files that are committed."""
+    import shutil
+
+    for name in ("index.js", "style.css"):
+        source = DASHBOARD / "src" / name
+        target = DASHBOARD / "dist" / name
+        assert source.read_bytes() == target.read_bytes()
+
+    # And the build script runs cleanly from scratch.
+    assert dashboard_build.build() == 0
+    for name in ("index.js", "style.css"):
+        source = DASHBOARD / "src" / name
+        target = DASHBOARD / "dist" / name
+        assert source.read_bytes() == target.read_bytes()
+
+
+def test_the_bundle_is_not_ignored_by_git():
+    """The build output must be tracked, or the manifest points at nothing.
+
+    This was the real cause of the blank tab: a ``dist/`` rule in the
+    repository's ``.gitignore`` swallowed the dashboard's own ``dist/``
+    folder, so the files the manifest names were never committed.
+    """
+    import subprocess
+
+    repository = Path(__file__).resolve().parents[1]
+    try:
+        result = subprocess.run(
+            ["git", "check-ignore", "-q", "plugins/gmi-nexus/dashboard/dist/index.js"],
+            cwd=str(repository),
+            capture_output=True,
+        )
+    except (OSError, NotImplementedError):  # pragma: no cover - no git
+        pytest.skip("git is not available here")
+
+    assert result.returncode != 0, (
+        "the dashboard's bundle is ignored by git, so it would never be "
+        "committed and the manifest would point at nothing"
+    )
+
+
+def test_the_manifest_has_no_other_missing_files():
+    """Every path the manifest names, checked all at once."""
+    spec = json.loads((DASHBOARD / "manifest.json").read_text(encoding="utf-8"))
+
+    named = [str(spec.get(key) or "") for key in ("entry", "css", "api")]
+
+    assert all((DASHBOARD / name).exists() for name in named if name)

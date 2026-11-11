@@ -140,7 +140,12 @@ def _as_int(value: Any) -> int | None:
 
 
 def parse_pricing(raw: Any, discount: Any = None) -> Pricing:
-    """Build a :class:`Pricing` from the catalogue's ``pricing`` block."""
+    """Build a :class:`Pricing` from the catalogue's ``pricing`` block.
+
+    The block's *presence* is recorded as well as its values: a model the
+    catalogue gives no ``pricing`` block for is one whose cost is unknown,
+    and unknown is not the same as free.
+    """
     if not isinstance(raw, dict):
         raw = {}
     overrides = raw.get("overrides")
@@ -153,6 +158,7 @@ def parse_pricing(raw: Any, discount: Any = None) -> Pricing:
         input_cache_write=_as_float(raw.get("input_cache_write")),
         overrides=[o for o in overrides if isinstance(o, dict)] if isinstance(overrides, list) else [],
         discount_to_user=_as_float(discount),
+        published=bool(raw),
     )
 
 
@@ -483,6 +489,26 @@ class ModelRegistry:
             self.refresh(force=refresh)
         with self._lock:
             return list(self._models.values())
+
+    def cached_models(self) -> list[ModelInfo]:
+        """Return the models already read, without touching the network.
+
+        This is what the approval hook uses: it has to price a call in the
+        time a hook is allowed to take, so it may only use the catalogue
+        NEXUS has already fetched. An empty result means the catalogue has
+        not been read yet, which is a reason to ask a human, not a reason to
+        assume the call is free.
+        """
+        with self._lock:
+            return list(self._models.values())
+
+    def cached_media(self, modality: Modality | None = None) -> list[MediaModelInfo]:
+        """Return the request-queue models already read, without the network."""
+        with self._lock:
+            models = list(self._media.values())
+        if modality is not None:
+            models = [m for m in models if m.modality is modality]
+        return sorted(models, key=lambda m: (not m.product, m.id))
 
     def get(self, model_id: str) -> ModelInfo | None:
         """Return one model by id."""

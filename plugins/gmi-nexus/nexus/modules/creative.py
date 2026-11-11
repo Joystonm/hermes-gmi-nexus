@@ -20,8 +20,6 @@ Every request goes through the same path:
 from __future__ import annotations
 
 import base64
-import mimetypes
-import os
 from dataclasses import dataclass, field
 from typing import Any, Sequence
 
@@ -180,6 +178,7 @@ class CreativeEngine:
                 estimate,
                 approved=approved,
                 description=f"a {modality.value} generation with {candidate.model_id}",
+                price_known=candidate.spec.has_published_price(),
             )
         except NexusError as exc:
             return CreativeResult(
@@ -308,25 +307,34 @@ def _prepare_media_value(value: Any, parameter: Any) -> Any:
     The model's own parameter description says what it wants: a path, a URL, a
     ``data:`` URI or raw base64. Reading that description is the difference
     between a working request and a rejected one.
+
+    A local path is checked before it is opened. It has to be an image file
+    — by its contents, not only by its name — and it has to live somewhere
+    NEXUS is allowed to read from. A path named by a model is a path, and a
+    path can be a profile's ``.env``.
     """
     if not isinstance(value, str) or not value:
         return value
     if value.startswith(("http://", "https://", "data:")):
         return value
-    if not os.path.exists(value):
-        raise ValidationError(f"the input file does not exist: {value}")
+
+    from ..paths import detect_image_type, resolve_local_image
+
+    resolved = resolve_local_image(value, purpose="sent")
+    with open(resolved, "rb") as handle:
+        head = handle.read(32)
+        handle.seek(0)
+        payload = base64.b64encode(handle.read()).decode("ascii")
+    mime = detect_image_type(head)
+    if mime is None:
+        raise ValidationError(f"the input file is not an image: {value}")
 
     description = (parameter.description if parameter is not None else "").lower()
-    mime, _ = mimetypes.guess_type(value)
-    mime = mime or "image/png"
-    with open(value, "rb") as handle:
-        payload = base64.b64encode(handle.read()).decode("ascii")
-
     if "base64" in description and "data:" not in description:
         # The parameter documents raw base64 rather than a data URI.
         return payload
     if "path" in description and "url" not in description:
-        return value
+        return resolved
     return f"data:{mime};base64,{payload}"
 
 

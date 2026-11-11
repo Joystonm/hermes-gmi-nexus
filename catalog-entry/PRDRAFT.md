@@ -71,10 +71,33 @@ plugin's own README, which is the page the catalog renders.
   GMI Cloud, and only as part of a request the agent asked for.
 * **Spending.** A per-run ceiling, a rolling daily ceiling and an approval
   threshold are enforced **before** a request is submitted. A request
-  estimated above the threshold is refused unless the caller approves it. The
-  figures NEXUS reports are the provider's reported usage priced at the
-  catalogue's published rates, and are labelled as estimates — never as a
-  bill.
+  estimated at or above the threshold is **held for a person**: NEXUS hands
+  it to Hermes' own approval prompt, and only the person answering that
+  prompt unlocks it. There is no `approve` argument in any of the tool
+  schemas, so the model cannot approve its own spend, and the rule is per
+  tool. A request whose cost cannot be worked out — because the catalogue
+  publishes no price for the model — is always held; an unknown cost is
+  never treated as a zero cost. The figures NEXUS reports are the provider's
+  reported usage priced at the catalogue's published rates, and are labelled
+  as estimates — never as a bill.
+* **Reads local files the model names.** `nexus_media` and `nexus_vision`
+  take an image or a mask, and a model can put a path in either. NEXUS checks
+  the path before opening it: it is resolved, so a symlink is followed to
+  where it really points; it must be a regular file; its extension must name
+  an image type **and** its first bytes must be that image type; and it must
+  live in the working directory, the plugin's own data directory or the
+  system temporary directory. A file inside Hermes' home directory — where
+  the profile's `.env` and every other secret lives — is never read and
+  never sent. A file that fails any of these checks is refused, and nothing
+  is uploaded.
+* **Fetches remote images the model names.** To inline an image, NEXUS
+  downloads it, and the URL came from a model, so it is checked rather than
+  trusted: every hop of the redirect chain is resolved, and every address
+  must be a public one. Private, loopback, link-local, reserved and
+  multicast addresses are refused — `169.254.169.254` among them — as is a
+  host that cannot be resolved at all. The image type comes from the bytes,
+  not from the server's `Content-Type`. A refused URL is a refusal, not a
+  failed download: NEXUS does not fall back on sending it along.
 * **Capability probing.** To verify that a model can actually read an image,
   NEXUS may send it a small probe image — a randomly drawn three-digit
   number — and ask it to read the number back. This is a real request and is
@@ -85,12 +108,13 @@ plugin's own README, which is the page the catalog renders.
 Four levels, kept separate; see the plugin's
 `docs/HERMES_VALIDATION.md` for the full report.
 
-1. **Unit** — 274 tests collected: **268 passed, 6 skipped** (the live ones),
-   all passing. No network, no cost. Under Hermes' own `web` pins the same
-   suite was recorded at **230 passed, 5 skipped**, with the real `fastapi`
-   router loaded. (That pinned figure was recorded before the suite grew by
-   the tests covering the generation-latency fix, the retired-model verdict,
-   the malformed-JSON repair and the narration's claim check.)
+1. **Unit** — 357 tests collected: **349 passed, 8 skipped** (the live ones,
+   and two symlink tests that need a privilege Windows does not grant by
+   default), all passing. No network, no cost. Under Hermes' own `web` pins
+   the same suite was recorded at **350 passed, 7 skipped**, with the real
+   `fastapi` router loaded. (That pinned figure was recorded before the suite
+   grew by the tests covering the generation-latency fix, the retired-model
+   verdict, the malformed-JSON repair and the narration's claim check.)
 2. **Mock integration** — the real pipeline, router, executor, evaluator,
    storage, budget and dashboard API, with only the HTTP layer stubbed.
    `scripts/demo_run.py --dry-run` runs the whole scenario end to end this
@@ -168,6 +192,35 @@ found this way and all ten are fixed:
 Each has a regression test — fourteen of them for the last two alone, in
 `tests/test_resilience.py`.
 
+### What a maintainer review found
+
+Five issues were raised in review, and all five are fixed, each with its own
+regression tests:
+
+1. **The model could approve its own spend.** Every spending tool took an
+   `approve: true` that skipped the threshold, and the results told the
+   model to pass it. There is no such argument now. NEXUS registers a
+   `pre_tool_call` hook that hands an over-threshold call to Hermes' own
+   approval prompt, and only the person answering that prompt unlocks it.
+   The unlock is a single-use token, bound to the tool and to the arguments
+   of that one call, kept in a ledger inside the plugin.
+2. **A model with no published price was estimated at $0.00** and so passed
+   every cap. An unknown price is now never free: the estimate is unknown,
+   the call is held for a person, the media router passes over the model,
+   and the media client refuses to submit the request at all.
+3. **A local path could be uploaded as an image.** A path named by a model
+   could be the profile's `.env`. Paths are now resolved and checked by
+   extension *and* by magic bytes, and are only read from the working
+   directory, the plugin's data directory or the temporary directory.
+4. **Vision fetched any model-supplied URL, with redirects on.** Every hop
+   is now resolved and every address must be public, and the image type
+   comes from the bytes rather than from a `Content-Type` header that may
+   be missing.
+5. **The dashboard manifest pointed at files that were not tracked.** The
+   bundle is now in the repository with its source and its build script,
+   and a test fails if the manifest and the committed bundle ever drift
+   apart.
+
 ## The card
 
 The entry carries an `image:` banner (1200x600, 2:1) and the six dashboard
@@ -196,8 +249,10 @@ and say why. It never shows a number NEXUS did not measure.
   nothing" and never triggers a dependency question.
 * `nexus_dev` deliberately has **no** shell of its own. Every file write and
   every test command goes through `ctx.dispatch_tool` to Hermes' own tools.
-  It also goes through the same budget gate as every other path, so the
-  `approve` flag on the tool means what it says.
+  It also goes through the same budget gate as every other path, and it
+  goes through the same approval rule: a call that reaches the threshold is
+  held for a person through Hermes' own approval prompt, and the tool
+  carries no argument the model could set to wave that through itself.
 * `scripts/demo_run.py` runs the brief's scenario end to end — analyse, route,
   generate, implement through Hermes' tools, inspect, correct, verify, report.
   `--dry-run` spends nothing and labels every simulated output as such;

@@ -174,10 +174,18 @@ class GmiMediaClient:
         *,
         spec: MediaModelSpec | None = None,
     ) -> float:
-        """Estimate the USD cost of one generation of this model."""
+        """Estimate the USD cost of one generation of this model.
+
+        Raises when the catalogue publishes no price for the model: an
+        unknown cost is not a $0.00 cost, and a caller that cannot tell the
+        difference would spend against a cap it never applied.
+        """
         spec = spec or self.catalog.get_spec(model_id)
         if spec is None:
-            return 0.0
+            raise ValidationError(
+                f"no published description of {model_id} is available, so the "
+                "cost of a generation with it cannot be estimated"
+            )
         options = options or {}
         count = int(options.get("n") or 1)
         duration = options.get("duration")
@@ -215,6 +223,15 @@ class GmiMediaClient:
                 existing.dropped_options = dropped
                 existing.estimated_cost_usd = 0.0  # nothing was spent the second time
                 return existing
+
+        if not spec.has_published_price():
+            # NEXUS will not submit a request whose cost it cannot bound.
+            # The media router already refuses such a model; this is the
+            # backstop for a caller that reaches the queue directly.
+            raise ValidationError(
+                f"the catalogue publishes no price for {model_id}, so NEXUS "
+                "will not submit a request it cannot price"
+            )
 
         estimated = spec.estimate_cost(
             count=int((options or {}).get("n") or 1),

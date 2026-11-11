@@ -20,6 +20,11 @@ What NEXUS deliberately does **not** do:
   model's published schema decides the request that gets built.
 * It does not claim a generation succeeded when the API failed, and it does
   not report an estimate as a bill.
+* It does not let the model approve its own spend. There is no ``approve``
+  argument in any of its schemas; a call that reaches the configured
+  threshold is escalated to Hermes' own approval prompt by a
+  ``pre_tool_call`` hook, and only the person answering that prompt can
+  unlock it.
 * It does not shell out on its own. The Dev Agent writes files and runs
   tests through Hermes' own ``write_file`` and ``terminal`` tools, so
   Hermes' approval policy, sandboxing and audit trail apply to it as they
@@ -32,10 +37,12 @@ import logging
 from typing import Any
 
 try:  # Hermes loads this file as a package (``hermes_plugins.<slug>``).
+    from .nexus.approval import approver, make_hooks
     from .nexus.config import read_api_key
     from .nexus.schemas import SCHEMAS
     from .nexus.tools import TOOLS, NexusToolBox
 except ImportError:  # pragma: no cover - loaded as a plain module by tooling
+    from nexus.approval import approver, make_hooks
     from nexus.config import read_api_key
     from nexus.schemas import SCHEMAS
     from nexus.tools import TOOLS, NexusToolBox
@@ -103,7 +110,28 @@ def register(ctx: Any) -> None:
         args_hint="[status|models|report]",
     )
 
+    _register_spend_hooks(ctx, box)
+
     logger.info("GMI NEXUS registered %d tools", len(SCHEMAS))
+
+
+def _register_spend_hooks(ctx: Any, box: NexusToolBox) -> None:
+    """Register the ``pre_tool_call`` callbacks that make a human approve spend.
+
+    Two callbacks, because a Hermes hook directive carries one action:
+
+    * the first returns a ``modify`` directive carrying a single-use token
+      for the call, which the tool has to present before it may spend;
+    * the second returns an ``approve`` directive, which sends the call to
+      Hermes' own approval prompt — the same gate a dangerous shell command
+      goes through, with the same "once / session / always / deny" choices
+      and the same fail-closed behaviour when nobody can answer.
+
+    The model has no argument that can stand in for either of them.
+    """
+    modify_hook, approve_hook = make_hooks(approver(), box.approval_context)
+    ctx.register_hook("pre_tool_call", modify_hook)
+    ctx.register_hook("pre_tool_call", approve_hook)
 
 
 def _make_command(box: NexusToolBox) -> Any:

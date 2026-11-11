@@ -127,6 +127,37 @@ class Executor:
             return Modality.AUDIO
         return None
 
+    @staticmethod
+    def media_modality(step: Step) -> Modality | None:
+        """Return the modality a step generates, or ``None`` for a text step.
+
+        The public face of :meth:`_media_modality`, so the approval hook can
+        price a planned step the same way the executor will run it.
+        """
+        return Executor._media_modality(step)
+
+    def token_budget(self, step: Step) -> int:
+        """The token budget for this step's reply."""
+        return self._token_budget(step)
+
+    @staticmethod
+    def required_capabilities(step: Step) -> tuple[Capability, ...]:
+        """The capabilities a step needs from a model."""
+        return Executor._required(step)
+
+    def estimate_step_cost(
+        self, step: Step, model: Any, *, completion_tokens: int | None = None
+    ) -> float:
+        """Estimate what running this step on this model would cost.
+
+        The same estimate the executor's own budget check makes, so the
+        figure a person is shown before approving a call is the figure the
+        guard will check afterwards.
+        """
+        messages = self._build_messages(step, ExecutionContext(goal=step.description))
+        budget = self._token_budget(step) if completion_tokens is None else int(completion_tokens)
+        return self._estimate_llm_cost(model, messages, budget)
+
     def preview_route(
         self,
         step: Step,
@@ -301,6 +332,7 @@ class Executor:
                     estimate,
                     approved=approved,
                     description=f"a call to {model.id}",
+                    price_known=model.price_known,
                 )
             except NexusError as exc:
                 last_error = exc.to_dict()
@@ -466,6 +498,7 @@ class Executor:
                 estimate,
                 approved=approved,
                 description=f"a {modality.value} generation with {candidate.model_id}",
+                price_known=candidate.spec.has_published_price(),
             )
         except NexusError as exc:
             result.status = "failed"

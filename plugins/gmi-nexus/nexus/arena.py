@@ -239,6 +239,7 @@ class Arena:
                     estimate,
                     approved=approved,
                     description=f"a benchmark call to {model.id}",
+                    price_known=model.price_known,
                 )
             except NexusError as exc:
                 result.error = f"not run: {exc}"

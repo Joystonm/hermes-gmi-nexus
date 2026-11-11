@@ -189,6 +189,15 @@ class Pricing:
     input_cache_write: float = 0.0
     overrides: list[dict[str, Any]] = field(default_factory=list)
     discount_to_user: float = 0.0
+    #: True when the catalogue actually published a price for this model.
+    #:
+    #: A model whose price is not published is not free — it is *unknown*, and
+    #: the two are not the same thing. A zero-valued price block means the
+    #: provider says the model costs nothing; a missing price block means the
+    #: provider did not say. Pricing an unpriced model at $0.00 would let it
+    #: pass every spend cap while its real cost was unbounded, so the flag
+    #: exists to keep the two apart all the way to the budget guard.
+    published: bool = False
 
     def tier_for(self, prompt_tokens: int) -> dict[str, Any]:
         """Return the pricing tier that applies at ``prompt_tokens``.
@@ -218,6 +227,7 @@ class Pricing:
             input_cache_write=float(tier.get("input_cache_write", self.input_cache_write) or 0.0),
             overrides=self.overrides,
             discount_to_user=self.discount_to_user,
+            published=self.published,
         )
 
     def cost(
@@ -271,6 +281,16 @@ class ModelInfo:
     def capability_set(self) -> set[Capability]:
         return set(self.capabilities)
 
+    @property
+    def price_known(self) -> bool:
+        """Whether the catalogue publishes a price for this model.
+
+        A model the provider marks as free publishes a price of zero, which is
+        a price. A model whose price the catalogue does not publish at all is
+        *unknown*, and an unknown price is not a zero price.
+        """
+        return bool(self.pricing.published or self.is_free)
+
     def supports(self, capability: Capability) -> bool:
         return capability in self.capability_set
 
@@ -282,6 +302,7 @@ class ModelInfo:
             "context_length": self.context_length,
             "quantization": self.quantization,
             "pricing": self.pricing.to_dict(),
+            "price_known": self.price_known,
             "capabilities": [c.value for c in self.capabilities],
             "capability_evidence": dict(self.capability_evidence),
             "is_ready": self.is_ready,

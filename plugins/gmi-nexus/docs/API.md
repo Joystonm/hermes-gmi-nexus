@@ -25,6 +25,80 @@ configured — the model is never offered a tool that cannot work.
 
 ---
 
+# Three rules that hold whichever tool is called
+
+These are not parameters. They are properties of the plugin, and they are
+the reason a model cannot make it spend money, read a secret or reach the
+machine's own network.
+
+## 1. Only a person approves a spend
+
+NEXUS registers two `pre_tool_call` hooks. The first works out an upper
+bound on what the call may cost, using the catalogue it has **already read**
+— it never makes a network call, because a hook that blocks on the network
+blocks the tool behind it. The second hands the call to Hermes' own approval
+prompt.
+
+* A call whose estimate is below `approval_threshold_usd` goes straight
+  through.
+* A call whose estimate reaches the threshold is held, and the person
+  answering Hermes' prompt is the only thing that unlocks it. The prompt
+  says what is about to be spent and how much at most.
+* A call whose cost **cannot be worked out** is also held. That is the case
+  for a model the catalogue does not publish a price for, and for a
+  catalogue NEXUS has not read yet. An unknown cost is not a zero cost.
+* The approval rule is **per tool**: allowing `nexus_run` for the session
+  does not allow `nexus_media`.
+
+There is no `approve` argument anywhere in the eight schemas, and there is
+no way for the model to mint an approval. The hook issues a single-use token
+into a ledger inside the plugin; the token is random, tied to the arguments
+it was issued for, and spent by the call it belongs to. The per-run cap and
+the rolling daily cap stay hard limits underneath it, and nothing the model
+says can lift them.
+
+## 2. A named file is checked, not trusted
+
+`nexus_media` takes an `image` and a `mask`; `nexus_vision` takes images. A
+model can put a path in any of them, so the path is checked before the file
+is opened:
+
+* the path is resolved, so a symlink is followed to where it really points;
+* it must be a regular file;
+* its extension must name an image type **and** its first bytes must be
+  that image type — an extension alone proves nothing, because the
+  extension is the part a caller chooses;
+* it must live in the working directory, NEXUS' own plugin-data directory or
+  the system temporary directory;
+* and it must never live inside Hermes' home directory, which is where the
+  profile's `.env` and every other secret lives.
+
+A file that fails any of these checks is refused with a message naming the
+file and the rule it broke. Nothing is uploaded.
+
+## 3. A named URL is checked, not trusted
+
+`nexus_vision` downloads a remote image so it can be inlined. The URL came
+from a model, so every hop of the redirect chain is resolved and checked
+before anything connects to it:
+
+* only `http` and `https` are fetched, and a URL carrying credentials in its
+  authority is refused;
+* every address the host answers with must be a public one — a name that
+  answers with both a public and a private address is refused, because which
+  one the socket picks is not ours to decide;
+* private, loopback, link-local, reserved and multicast addresses are all
+  refused, `169.254.169.254` among them;
+* a host that cannot be resolved is refused, because an address that cannot
+  be checked is not an address that has been checked;
+* the image type comes from the bytes, not from the server's `Content-Type`,
+  because a header is a claim and the bytes are the file.
+
+A refused URL is **not** a failed download: NEXUS does not fall back on
+sending it along.
+
+---
+
 ## `nexus_models`
 
 List what GMI Cloud actually offers right now.
@@ -246,7 +320,6 @@ Run a goal through the whole eight-step pipeline.
 | --- | --- | --- | --- |
 | `goal` | string | **yes** | What you want accomplished. |
 | `strategy` | string | no | `balanced` (default), `quality`, `fast` or `cheap`. |
-| `approve` | boolean | no | Approve a request whose estimated cost is above the approval threshold. |
 
 ```json
 {
@@ -327,7 +400,6 @@ Run identical test cases across several models and report what happened.
 | --- | --- | --- | --- |
 | `models` | array of string | no | Model ids to test. Omit to let NEXUS pick a diverse set. |
 | `suite` | string | no | `default` covers instruction following, JSON contracts, code generation and arithmetic. |
-| `approve` | boolean | no | Approve a request above the approval threshold. |
 
 ```json
 {
@@ -385,7 +457,6 @@ Look at images.
 | `before` / `after` | string | yes, for `compare` | The two images to compare. |
 | `criteria` | string | no | Extra criteria for `issues` — e.g. `matches the brand palette`. |
 | `app` | string | no | Which application to capture, for `screenshot`. |
-| `approve` | boolean | no | Approve a request above the approval threshold. |
 
 ```json
 {
@@ -436,7 +507,6 @@ Generate or edit images, video and audio.
 | `options` | object | no | Generation options — `aspect_ratio`, `size`, `width`, `height`, `duration`, `resolution`, `negative_prompt`, `seed`, `reference_image`. |
 | `image` | string | no | An existing image to edit. A path, URL or `data:` URI. |
 | `mask` | string | no | The mask that selects the region to edit. |
-| `approve` | boolean | no | Approve a request above the approval threshold. |
 
 ```json
 {
@@ -489,7 +559,6 @@ writing and the testing.
 | `files` | array of string | no | Paths of the files the task touches. They are read and given to the model as context. |
 | `test_command` | string | no | The command that runs the tests, e.g. `pytest -q`. |
 | `max_attempts` | integer | no | How many times to attempt the fix (default 2). |
-| `approve` | boolean | no | Approve a request above the approval threshold. |
 
 ```json
 {
@@ -536,7 +605,11 @@ command was given, so "not run" is never shown as "passed".
 
 The model's calls go through the same spend limits as every other path: the
 per-run cap, the rolling daily cap and the approval threshold are all checked
-**before** the request goes out, so `approve` here means what it says.
+**before** the request goes out. A call that reaches the threshold is held
+for a person: NEXUS registers a `pre_tool_call` hook that hands the call to
+Hermes' own approval prompt, and only the person answering that prompt
+unlocks it. There is no `approve` argument — the model cannot approve its own
+spend.
 
 The call that asks for files asks for `code_max_tokens` of room — 8192 by
 default. The inference client's own default of 2048 is enough for a sentence

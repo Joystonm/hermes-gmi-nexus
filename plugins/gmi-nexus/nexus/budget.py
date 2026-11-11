@@ -7,11 +7,16 @@ limit without a human saying so. Three gates apply, in order:
 2. **Daily cap** — the organisation's tracked spend for the day may not exceed
    ``daily_budget_usd``.
 3. **Approval** — a single operation whose estimated cost is at or above
-   ``approval_threshold_usd`` is held until it is approved.
+   ``approval_threshold_usd``, or whose cost cannot be estimated at all
+   because the catalogue publishes no price for the model, is held until a
+   person approves it.
 
-The approval gate raises :class:`ApprovalRequiredError` rather than blocking
-forever: the estimate travels with the error, so Hermes' own approval flow (or
-a human) can approve it and the call can be retried with ``approved=True``.
+The first two gates are hard: nothing but an operator changing the
+configuration lifts them. The third is settled by a person — never by the
+model, which has no argument it can set to approve its own spend. The
+approval arrives as Hermes' own approval decision, carried in by the
+plugin's ``pre_tool_call`` hook, and it arrives as a single-use token that
+the tool has to present before it is allowed to spend.
 
 All three figures are *estimates at list price*, adjusted for the discount the
 live catalogue publishes for the model. They are estimates of what the call is
@@ -48,6 +53,8 @@ class BudgetDecision:
     daily_spend_usd: float = 0.0
     daily_remaining_usd: float = 0.0
     run_remaining_usd: float = 0.0
+    #: False when the estimate rests on a price the catalogue did not publish.
+    price_known: bool = True
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -58,6 +65,7 @@ class BudgetDecision:
             "daily_spend_usd": round(self.daily_spend_usd, 8),
             "daily_remaining_usd": round(self.daily_remaining_usd, 8),
             "run_remaining_usd": round(self.run_remaining_usd, 8),
+            "price_known": self.price_known,
         }
 
 
@@ -113,8 +121,16 @@ class BudgetGuard:
         *,
         approved: bool = False,
         description: str = "",
+        price_known: bool = True,
     ) -> BudgetDecision:
-        """Check whether a spend of this size is allowed right now."""
+        """Check whether a spend of this size is allowed right now.
+
+        ``price_known`` says whether the estimate is an estimate at all. A
+        model whose price the catalogue does not publish produces an estimate
+        of $0.00, and $0.00 would sail through every cap; so an unknown
+        price is treated as needing a person's approval rather than as being
+        free.
+        """
         estimate = max(0.0, float(estimated_cost_usd))
         daily = self.daily_spend()
         daily_remaining = max(0.0, self.settings.daily_budget_usd - daily)
@@ -126,6 +142,7 @@ class BudgetGuard:
             daily_spend_usd=daily,
             daily_remaining_usd=daily_remaining,
             run_remaining_usd=run_remaining,
+            price_known=bool(price_known),
         )
 
         if estimate > run_remaining:
@@ -144,6 +161,17 @@ class BudgetGuard:
             )
             return decision
 
+        if not price_known and not approved:
+            decision.requires_approval = True
+            decision.allowed = False
+            label = description or "this operation"
+            decision.reason = (
+                f"the catalogue publishes no price for {label}, so its cost cannot be "
+                "estimated and the spend limits cannot be applied to it. A person has "
+                "to approve it before it is submitted."
+            )
+            return decision
+
         if estimate >= self.settings.approval_threshold_usd and not approved:
             decision.requires_approval = True
             decision.allowed = False
@@ -151,7 +179,7 @@ class BudgetGuard:
             decision.reason = (
                 f"{label} is estimated to cost about ${estimate:.6f}, which is at or above the "
                 f"${self.settings.approval_threshold_usd:.2f} approval threshold. "
-                "Re-run with approval to proceed."
+                "A person has to approve it before it is submitted."
             )
             return decision
 
@@ -163,9 +191,15 @@ class BudgetGuard:
         *,
         approved: bool = False,
         description: str = "",
+        price_known: bool = True,
     ) -> BudgetDecision:
         """Check the budget and raise when the spend is not allowed."""
-        decision = self.check(estimated_cost_usd, approved=approved, description=description)
+        decision = self.check(
+            estimated_cost_usd,
+            approved=approved,
+            description=description,
+            price_known=price_known,
+        )
         if decision.allowed:
             return decision
         if decision.requires_approval:

@@ -20,15 +20,6 @@ _STRATEGY = {
     ),
 }
 
-_APPROVE = {
-    "type": "boolean",
-    "description": (
-        "Set to true to approve a request whose estimated cost is above the "
-        "configured approval threshold. Costs are estimated from the live "
-        "catalogue's published prices; the actual charge is reported separately."
-    ),
-}
-
 _MODES = ["analyze", "issues", "compare", "screenshot"]
 
 NEXUS_MODELS_SCHEMA = {
@@ -130,7 +121,6 @@ NEXUS_RUN_SCHEMA = {
                 "description": "What you want accomplished, in plain language.",
             },
             "strategy": _STRATEGY,
-            "approve": _APPROVE,
         },
         "required": ["goal"],
     },
@@ -164,7 +154,6 @@ NEXUS_BENCHMARK_SCHEMA = {
                     "reasoning and summarisation."
                 ),
             },
-            "approve": _APPROVE,
         },
         "required": [],
     },
@@ -226,7 +215,6 @@ NEXUS_VISION_SCHEMA = {
                     "(default: the whole screen)."
                 ),
             },
-            "approve": _APPROVE,
         },
         "required": [],
     },
@@ -275,7 +263,6 @@ NEXUS_MEDIA_SCHEMA = {
                 "type": "string",
                 "description": "The mask that selects the region to edit.",
             },
-            "approve": _APPROVE,
         },
         "required": ["prompt"],
     },
@@ -326,7 +313,6 @@ NEXUS_DEV_SCHEMA = {
                 "type": "integer",
                 "description": "How many times to attempt the fix (default 2).",
             },
-            "approve": _APPROVE,
         },
         "required": ["task"],
     },

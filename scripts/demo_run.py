@@ -36,6 +36,12 @@ Two modes
     run is bounded by the plugin's own limits, which this script does not
     raise.
 
+    ``--approve-spend`` is a *person's* approval. Inside Hermes the same
+    authorisation arrives as a single-use token that the plugin's
+    ``pre_tool_call`` hook issues once a person has answered Hermes' own
+    approval prompt; outside Hermes, this script issues that token itself.
+    The model cannot approve its own spend either way.
+
 Usage
 -----
 
@@ -46,10 +52,12 @@ Usage
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import os
 import re
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
@@ -233,6 +241,55 @@ class LocalHost:
 # The scripted stand-in for GMI Cloud, used by the free dry run.
 # --------------------------------------------------------------------------- #
 
+#: The host the dry run's generated assets are served from.
+#:
+#: It is a reserved name that can never be registered or resolved, which is
+#: exactly what a dry run wants: the URL is obviously not a real one, and
+#: nothing can reach it.
+DEMO_ASSET_HOST = "example.invalid"
+
+
+def demo_resolve_host(host: str, port: int) -> list[str]:
+    """The dry run's stand-in for DNS.
+
+    The plugin checks that a URL it was given resolves to a public address
+    before it fetches it, and refuses a host that cannot be resolved at all.
+    The dry run makes no network calls, so its assets are served by the
+    stand-in transport instead — which means the stand-in has to stand in
+    for the resolver too, or the plugin would refuse the dry run's own
+    asset for the right reason at the wrong moment.
+
+    Only the dry run's own asset host is answered. Everything else is
+    refused, so the plugin's refusal path stays exactly as it is.
+    """
+    if host == DEMO_ASSET_HOST:
+        return ["93.184.216.34"]
+    raise socket.gaierror(f"the dry run has no address for {host!r}")
+
+
+def demo_asset_png() -> bytes:
+    """The bytes of the image the dry run's stand-in serves.
+
+    A real PNG, so the plugin's check on the bytes — that what arrived is
+    an image, whatever the server called it — has something real to agree
+    with. It is drawn with the plugin's own PNG writer, so the dry run
+    needs no image library.
+    """
+    from nexus.modules.vision import png_data_uri
+
+    width, height = 64, 36
+    pixels: list[list[tuple[int, int, int]]] = []
+    for y in range(height):
+        row: list[tuple[int, int, int]] = []
+        for x in range(width):
+            # A pale field with a few deep-blue beams through it: the same
+            # picture the real hero prompt asks for, in miniature.
+            beam = any(abs(x - offset) < 2 for offset in (10, 24, 40, 54))
+            row.append((30, 58, 140) if beam else (238, 242, 250))
+        pixels.append(row)
+    data_uri = png_data_uri(pixels)
+    return base64.b64decode(data_uri.split(",", 1)[1])
+
 #: A small catalogue that exercises the router: a code specialist, a
 #: reasoning model, a vision model that *declares* its modality, a cheap
 #: generalist and a middling one.
@@ -367,6 +424,7 @@ class DemoTransport:
         data: Any = None,
         files: Any = None,
         timeout: float = 60.0,
+        follow_redirects: bool = True,
     ) -> HttpResponse:
         self.requests.append(
             {"method": method, "url": url, "body": json_body, "headers": dict(headers or {})}
@@ -419,6 +477,15 @@ class DemoTransport:
         if url.endswith("/models"):
             return HttpResponse(
                 status=200, body=json.dumps(DEMO_CATALOGUE), headers={"content-type": "application/json"}
+            )
+        if url.startswith(f"https://{DEMO_ASSET_HOST}/"):
+            # A generated asset. Real PNG bytes, so the plugin's check on
+            # the bytes has something real to agree with.
+            return HttpResponse(
+                status=200,
+                body="",
+                headers={"content-type": "image/png"},
+                raw=demo_asset_png(),
             )
         return HttpResponse(status=404, body=json.dumps({"error": f"no route for {url}"}))
 
@@ -612,22 +679,64 @@ class Transcript:
 class Runner:
     """Walks the demo scenario, one phase at a time."""
 
-    def __init__(self, toolbox: NexusToolBox, host: LocalHost, *, simulated: bool) -> None:
+    def __init__(
+        self,
+        toolbox: NexusToolBox,
+        host: LocalHost,
+        *,
+        simulated: bool,
+        approved: bool = False,
+    ) -> None:
         self.box = toolbox
         self.host = host
         self.simulated = simulated
+        #: Whether the person running the script authorised the spend. This
+        #: is the demo's stand-in for Hermes' approval prompt: inside Hermes
+        #: the same authorisation arrives as a token the ``pre_tool_call``
+        #: hook issues once a person has answered the prompt.
+        self.approved = approved
         self.transcript = Transcript()
 
     # -- helpers ------------------------------------------------------------- #
 
     def call(self, tool: str, args: dict[str, Any]) -> dict[str, Any]:
         """Call one of the plugin's own tool handlers."""
-        raw = getattr(self.box, tool)(args)
+        raw = getattr(self.box, tool)(self._approved_args(tool, args))
         try:
             payload = json.loads(raw)
         except (TypeError, ValueError):
             payload = {"raw": str(raw)}
         return payload if isinstance(payload, dict) else {"result": payload}
+
+    def _approved_args(self, tool: str, args: dict[str, Any]) -> dict[str, Any]:
+        """Attach the operator's approval to a call that may spend money.
+
+        The plugin has no argument the *model* can set to approve its own
+        spend: a call that reaches the approval threshold is held for a
+        person, and only Hermes' own approval prompt — or, outside Hermes,
+        the person running this script — can unlock it.
+
+        So the authorisation here is a token, minted by the plugin's own
+        ledger and bound to the arguments of this call. It is what the
+        ``pre_tool_call`` hook issues inside Hermes, and it is what the
+        ``--approve-spend`` flag means: *a person* said yes.
+        """
+        from nexus.approval import APPROVAL_TOKEN_KEY, SPENDING_TOOLS, approver
+
+        if not self.approved or tool not in SPENDING_TOOLS:
+            return args
+        try:
+            ceiling = float(self.box.settings().max_cost_per_run_usd)
+        except Exception:
+            ceiling = 0.0
+        prepared = dict(args)
+        prepared[APPROVAL_TOKEN_KEY] = approver().issue(
+            tool,
+            prepared,
+            estimated_usd=None,
+            ceiling_usd=ceiling,
+        )
+        return prepared
 
     def banner(self, title: str, note: str = "") -> None:
         print()
@@ -712,7 +821,7 @@ class Runner:
     def phase_execute(self) -> dict[str, Any]:
         """EXECUTE, EVALUATE, RECOVER, LEARN — the whole pipeline."""
         self.banner("3. EXECUTE THE PIPELINE", "the eight steps run for real")
-        report = self.call("nexus_run", {"goal": GOAL, "approve": True})
+        report = self.call("nexus_run", {"goal": GOAL})
         if report.get("error"):
             self.field("error", report["error"])
             return report
@@ -804,7 +913,6 @@ class Runner:
             {
                 "prompt": prompt,
                 "modality": "image",
-                "approve": True,
             },
         )
 
@@ -822,7 +930,6 @@ class Runner:
                 "mode": "implement",
                 "task": task,
                 "test_command": test_command,
-                "approve": True,
             },
         )
         if outcome.get("error"):
@@ -853,7 +960,6 @@ class Runner:
                 "mode": "issues",
                 "images": [image],
                 "criteria": "layout, spacing, typography, contrast and legibility",
-                "approve": True,
             },
         )
         if outcome.get("error"):
@@ -924,7 +1030,6 @@ class Runner:
                 "before": before,
                 "after": after,
                 "question": "Did the corrections land?",
-                "approve": True,
             },
         )
         if outcome.get("error"):
@@ -997,7 +1102,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--approve-spend",
         action="store_true",
-        help="confirm that the live run may spend GMI Cloud credits",
+        help=(
+            "confirm that the live run may spend GMI Cloud credits — this is a "
+            "person's approval, carried to the plugin as a single-use token"
+        ),
     )
     parser.add_argument(
         "--output",
@@ -1044,6 +1152,7 @@ def main(argv: list[str] | None = None) -> int:
         # stand-in instead of the network.
         import nexus.http as nexus_http
         import nexus.modules.vision as nexus_vision
+        import nexus.netguard as nexus_netguard
 
         original = nexus_http.default_transport
         nexus_http.default_transport = DemoTransport
@@ -1051,14 +1160,21 @@ def main(argv: list[str] | None = None) -> int:
         # number. The live run leaves this alone and draws at random.
         original_number = nexus_vision.random_probe_number
         nexus_vision.random_probe_number = lambda: DEMO_PROBE_NUMBER
+        # The plugin resolves a URL's host before it fetches it, and refuses
+        # one that cannot be resolved. The dry run's assets are served by the
+        # stand-in, so the stand-in stands in for the resolver as well — for
+        # its own host only, so the refusal path is untouched.
+        original_resolver = nexus_netguard.resolve_host
+        nexus_netguard.resolve_host = demo_resolve_host
         try:
-            runner = Runner(toolbox, host, simulated=True)
+            runner = Runner(toolbox, host, simulated=True, approved=bool(args.approve_spend))
             _run_scenario(runner, host)
         finally:
             nexus_http.default_transport = original
             nexus_vision.random_probe_number = original_number
+            nexus_netguard.resolve_host = original_resolver
     else:
-        runner = Runner(toolbox, host, simulated=False)
+        runner = Runner(toolbox, host, simulated=False, approved=bool(args.approve_spend))
         _run_scenario(runner, host)
 
     # Write the transcript.

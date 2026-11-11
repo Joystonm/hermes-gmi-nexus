@@ -19,17 +19,17 @@ document says so.
 
 ## Level 1 — unit tests
 
-**274 tests collected, 6 skipped, 268 passed. All passing.**
+**357 tests collected, 8 skipped, 349 passed. All passing.**
 
 ```
 $ python -m pytest tests/
-268 passed, 6 skipped in 9.20s
+349 passed, 8 skipped in 14.58s
 ```
 
 On an interpreter carrying Hermes' own `web` pins the same suite was last
-recorded at **230 passed, 5 skipped** — that run predates the tests for the
-generation-latency fix, the retired-model verdict and the malformed-JSON
-repair. See *The environment the tests run in* below.
+recorded at **350 passed, 7 skipped** — the difference is one test that only
+skips on a system interpreter whose `fastapi` and `starlette` disagree. See
+*The environment the tests run in* below.
 
 Each test file covers one module:
 
@@ -45,7 +45,9 @@ Each test file covers one module:
 | `test_creative.py` | 21 | Generation, editing, masked editing, and the per-model parameter schemas. |
 | `test_dev.py` | 22 | The Dev Agent's analyse → generate → write → test → fix loop, through Hermes' own tools — including that the fix prompt carries the original task, that a call is given room to write a whole file, and that the budget gate is consulted before the money is spent. |
 | `test_plugin.py` | 24 | The registration contract: the eight tools, their schemas, the command, the credential handling. |
-| `test_dashboard.py` | 18 | The dashboard's six routes, their payloads and their empty states. |
+| `test_approval.py` | 36 | The spend rules: that no schema offers an `approve` argument, that a call over the threshold is held for a person through Hermes' own prompt, that the rule is per tool, that a call whose cost cannot be worked out is held, that the single-use token is bound to its tool and its arguments and cannot be minted by the model, and that a model with no published price is never estimated at $0.00. |
+| `test_safety.py` | 41 | The file and URL rules: that the profile's own files are never read, that a file is checked by its bytes and not only by its name, that a symlink is followed to where it points, that an internal address — `169.254.169.254` among them — is refused on every redirect hop, and that an unresolvable host is refused. |
+| `test_dashboard.py` | 24 | The dashboard's six routes, their payloads and their empty states, and the bundle the manifest points at: that the files it names exist, that `dist/` is what `src/` builds, and that nothing ignores them out of the repository. |
 | `test_resilience.py` | 14 | What the live runs taught the plugin to survive: the provider's real reason read out of a nested error, a retired model remembered and excluded from the candidates, a code reply whose newlines were written literally, and the retry that shows the model the reply which failed. |
 | `test_video_claims.py` | 24 | The demo video's narration, and the check that keeps it true: the numbers a person says, reading a value out of a run's JSON, and the refusal to synthesise or cut a video whose voice describes a run that did not happen. |
 | `test_live.py` | 5 | **Level 3.** Skipped unless explicitly opted in. |
@@ -54,7 +56,10 @@ The **5 skipped** tests are all in `test_live.py` — they are skipped because
 `GMI_LIVE_TESTS` is not set, which is the intended behaviour. On a system
 interpreter whose `fastapi` and `starlette` disagree, a sixth test skips:
 `test_the_environment_can_build_a_fastapi_router`, which reports that
-environment fault explicitly rather than hiding it.
+environment fault explicitly rather than hiding it. Two more skip where the
+platform does not allow the test to create a symbolic link, which is what
+Windows does without the developer mode; the rule those two check is the same
+rule the third test covers.
 
 ### The environment the tests run in
 
@@ -66,10 +71,10 @@ suite was re-run in a virtual environment carrying Hermes' declared pins:
 
 ```
 $ python -m pytest tests/          # fastapi 0.133.1, starlette 1.9.0
-230 passed, 5 skipped in 12.81s
+350 passed, 7 skipped in 15.85s
 ```
 
-That run was recorded before the suite grew by the fourteen resilience tests,
+That run was recorded before the suite grew by the approval and safety tests,
 so it is quoted as it was measured rather than restated as a current figure.
 
 Under those pins the plugin's real `dashboard/plugin_api.py` was loaded
@@ -85,7 +90,7 @@ for how the environment is created.
 
 ## Level 2 — mock integration
 
-Included in the 268 above; this level describes *which* of them are
+Included in the 349 above; this level describes *which* of them are
 integration-shaped rather than unit-shaped.
 
 The provider is stubbed at the HTTP layer (`nexus.http.HttpResponse`), never
@@ -96,7 +101,7 @@ report. Only the socket is absent.
 | Area | What the mock integration proves |
 | --- | --- |
 | **The pipeline** | A goal becomes a plan, the plan becomes routed steps, the steps run, the results are evaluated, a failure is recovered on a different model, the outcome is learned, and the report comes back — with the plan, the routing decisions and the costs in it. |
-| **The budget** | A run that would exceed `max_cost_per_run_usd` is refused *before* the request goes out. A request above `approval_threshold_usd` is refused without `approve`. The daily ceiling holds across runs. |
+| **The budget** | A run that would exceed `max_cost_per_run_usd` is refused *before* the request goes out. A request at or above `approval_threshold_usd` is held for a person through Hermes' own approval prompt — the model cannot approve its own spend, and a request whose cost cannot be worked out is always held. The daily ceiling holds across runs. |
 | **The recovery policy** | A failing step is retried on a *different* model, the models already tried are excluded, and both bounds hold: at most 4 provider calls per step and at most 2 recoveries per run. |
 | **The learning loop** | A verified success updates the model's statistics, and the statistics change the routing of a later step. |
 | **Storage** | The history lands in Hermes' plugin-data directory — not in the plugin — and follows `HERMES_HOME` when that changes. |

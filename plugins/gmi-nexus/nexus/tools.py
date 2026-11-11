@@ -70,6 +70,30 @@ class NexusToolBox:
             self._engine = Nexus(self._settings, ctx=self.ctx)
         return self._engine
 
+    def engine_if_ready(self) -> Nexus | None:
+        """Return the engine only when it has already been built.
+
+        The spend-approval hook needs a priced catalogue, and it runs on a
+        bounded worker thread. Building the engine here could read the
+        catalogue over the network, and a hook that blocks on the network
+        blocks the tool call behind it — so the hook is given the engine
+        that exists, and never one it has to go and get.
+        """
+        return self._engine
+
+    def approval_context(self) -> tuple[Settings, Nexus | None]:
+        """Return the settings and the engine the approval hook should read.
+
+        The engine's own settings are used when it exists, so the threshold
+        the hook applies is the same threshold the budget guard applies
+        inside the tool. A tool that reads the limits the hook used is the
+        only kind where the two can agree.
+        """
+        engine = self._engine
+        if engine is not None:
+            return engine.settings, engine
+        return self.settings(), None
+
     def refresh_settings(self) -> None:
         """Drop the cached engine so the next call picks up new settings."""
         if self._engine is not None:
@@ -106,6 +130,24 @@ class NexusToolBox:
     def _strategy(args: dict[str, Any]) -> str:
         strategy = str(args.get("strategy") or "balanced").strip().lower()
         return strategy if strategy in ("balanced", "quality", "fast", "cheap") else "balanced"
+
+    @staticmethod
+    def _approved(tool_name: str, args: dict[str, Any]) -> bool:
+        """Whether a person has approved this call.
+
+        The answer comes from a token the ``pre_tool_call`` hook adds once
+        Hermes' approval prompt has been answered. There is no argument the
+        model can set to get it: the token is random, single-use, tied to the
+        arguments it was issued for, and lives in a ledger inside the plugin.
+        A call without one is simply not approved, and the spend limits
+        apply as they are configured.
+        """
+        from .approval import approver
+
+        try:
+            return approver().consume(tool_name, args or {}) is not None
+        except Exception:  # pragma: no cover - defensive
+            return False
 
     # -- nexus_models ------------------------------------------------------- #
 
@@ -206,7 +248,7 @@ class NexusToolBox:
         report = engine.run(
             goal,
             strategy=self._strategy(args),
-            approved=self._bool(args, "approve"),
+            approved=self._approved("nexus_run", args),
         )
         return _dumps(report.to_dict())
 
@@ -243,7 +285,7 @@ class NexusToolBox:
         result = engine.arena.run(
             models,
             budget=engine.budget,
-            approved=self._bool(args, "approve"),
+            approved=self._approved("nexus_benchmark", args),
             suite_name=suite_name,
         )
         result["cost_note"] = (
@@ -258,7 +300,7 @@ class NexusToolBox:
         """Analyse images, find defects, compare, or capture the screen."""
         engine = self.engine()
         mode = self._str(args, "mode", "analyze").lower() or "analyze"
-        approved = self._bool(args, "approve")
+        approved = self._approved("nexus_vision", args)
 
         if mode == "screenshot":
             capture = engine.vision.capture_screenshot(app=self._str(args, "app", "screen") or "screen")
@@ -332,7 +374,7 @@ class NexusToolBox:
             prompt,
             modality=modality,
             options=options,
-            approved=self._bool(args, "approve"),
+            approved=self._approved("nexus_media", args),
         )
         payload = result.to_dict()
         payload["cost_note"] = (
@@ -341,8 +383,10 @@ class NexusToolBox:
         )
         if not result.ok and result.status == "blocked":
             payload["hint"] = (
-                "The request was refused by the configured spend limits. Raise "
-                "the limit or pass approve=true to proceed."
+                "The request was refused by the configured spend limits, or it "
+                "needs a person to approve it. Raise the limit in the plugin's "
+                "configuration, or ask the person running this session to "
+                "approve the request when Hermes asks."
             )
         return _dumps(payload)
 
@@ -356,7 +400,7 @@ class NexusToolBox:
         if not task:
             return _error("nexus_dev needs a 'task' describing the change to make.")
         files = self._list(args, "files")
-        approved = self._bool(args, "approve")
+        approved = self._approved("nexus_dev", args)
 
         if mode == "review":
             if not files:

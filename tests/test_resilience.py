@@ -76,7 +76,7 @@ class ScriptedChatTransport(FakeTransport):
         self.script = list(script)
 
     def request(self, method, url, *, headers=None, json_body=None, data=None,
-                files=None, timeout=60.0):
+                files=None, timeout=60.0, follow_redirects=True):
         if url.endswith("/chat/completions") and self.script:
             entry = self.script.pop(0)
             self.requests.append(

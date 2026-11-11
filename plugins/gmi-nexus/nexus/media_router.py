@@ -79,7 +79,11 @@ class MediaCandidate:
             item["modality"] = self.spec.modality.value
             item["status"] = self.spec.status
             item["provider"] = self.spec.provider
-            item["unit_price_usd"] = self.spec.unit_price_usd()
+            item["unit_price_usd"] = (
+                self.spec.unit_price_usd()
+                if self.spec.has_published_price()
+                else None
+            )
             item["unit"] = self.spec.unit()
         return item
 
@@ -223,6 +227,18 @@ class MediaRouter:
                 considered.append(candidate)
                 continue
 
+            if not spec.has_published_price():
+                # The catalogue publishes no price for this model, so the
+                # cost of using it cannot be bounded. NEXUS will not spend
+                # on a price it cannot see, so the model is passed over
+                # rather than treated as free.
+                candidate.rejected = (
+                    "the catalogue publishes no price for this model, so the "
+                    "cost of using it cannot be bounded"
+                )
+                considered.append(candidate)
+                continue
+
             cost = spec.estimate_cost(
                 count=int(options.get("n") or 1),
                 duration=_as_float(options.get("duration")),
@@ -244,7 +260,7 @@ class MediaRouter:
                 score += 1.0 / (1.0 + cost)
                 candidate.reasons.append(f"estimated ${cost:.6f} at list price")
             else:
-                candidate.reasons.append("price is not published for this model")
+                candidate.reasons.append("the published price for this model is zero")
             if spec.parameters:
                 score += 0.5
             else:

@@ -262,6 +262,7 @@ class DevAgent:
                         estimate,
                         approved=approved,
                         description=f"a call to {candidate.id}",
+                        price_known=candidate.price_known,
                     )
                 except NexusError as exc:
                     # The budget refuses every model equally, so there is no
@@ -416,6 +417,7 @@ class DevAgent:
                     estimate,
                     approved=approved,
                     description=f"a call to {candidate.id}",
+                    price_known=candidate.price_known,
                 )
             except NexusError as exc:
                 return DevOutcome(

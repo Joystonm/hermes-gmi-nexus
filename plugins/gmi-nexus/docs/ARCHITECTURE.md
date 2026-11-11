@@ -143,8 +143,13 @@ the request goes out. Three limits apply:
 
 * `max_cost_per_run_usd` — the ceiling for one run;
 * `daily_budget_usd` — the rolling ceiling for the day;
-* `approval_threshold_usd` — above this, the request is refused unless the
-  caller explicitly approves it.
+* `approval_threshold_usd` — at or above this, the request is **held for a
+  person**. NEXUS hands it to Hermes' own approval prompt through a
+  `pre_tool_call` hook, and only the person answering that prompt unlocks it.
+  There is no argument in any tool schema that the model can set to approve
+  its own spend, and a request whose cost cannot be worked out — because the
+  catalogue publishes no price for the model — is always held rather than
+  treated as free.
 
 The estimate is the provider's list price with the model's published discount
 applied. It is an estimate, and it is labelled as one everywhere it appears.

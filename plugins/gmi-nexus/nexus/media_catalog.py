@@ -170,6 +170,23 @@ class MediaModelSpec:
             return 0.0
         return value / MICRO_USD
 
+    def has_published_price(self) -> bool:
+        """Whether the catalogue publishes a price for this model.
+
+        A model whose price is published as zero is free, and that is a
+        price. A model the catalogue says nothing about the price of has an
+        *unknown* cost, and an unknown cost is not a zero cost: pricing it at
+        $0.00 would let it through every spend cap while its real price was
+        unbounded.
+        """
+        info = self.price_info or {}
+        if info.get("price") is not None:
+            return True
+        chart = info.get("price_chart")
+        if isinstance(chart, dict) and chart.get("rate") is not None:
+            return True
+        return False
+
     def estimate_cost(
         self,
         *,
@@ -182,7 +199,19 @@ class MediaModelSpec:
         The account's published discount is applied when the catalogue
         reports one. The result is an estimate of what the call is expected
         to cost, not a statement of what was billed.
+
+        A model whose price the catalogue does not publish has no estimate:
+        this raises rather than returning $0.00. $0.00 is what an unknown
+        price *looks* like, and a caller that cannot tell the difference
+        between "free" and "unknown" will spend against a cap it never
+        applied. A price the catalogue publishes as zero is a price, and
+        that returns $0.00.
         """
+        if not self.has_published_price():
+            raise ValidationError(
+                f"the catalogue publishes no price for {self.id}, so the cost "
+                "of a generation with it cannot be estimated"
+            )
         unit = self.unit()
         price = self.unit_price_usd()
         if price <= 0:
@@ -215,7 +244,10 @@ class MediaModelSpec:
             "parameters": [p.to_dict() for p in self.parameters],
             "price_info": dict(self.price_info),
             "unit": self.unit(),
-            "unit_price_usd": self.unit_price_usd(),
+            "unit_price_usd": (
+                self.unit_price_usd() if self.has_published_price() else None
+            ),
+            "price_published": self.has_published_price(),
             "discount": self.discount,
             "approximate": self.approximate,
             "fetched_at": self.fetched_at,

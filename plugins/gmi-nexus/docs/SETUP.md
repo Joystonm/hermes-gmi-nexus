@@ -144,7 +144,7 @@ plugins:
 | `max_parallel` | `3` | Independent steps run concurrently. |
 | `max_cost_per_run_usd` | `1.0` | The ceiling for one run. |
 | `daily_budget_usd` | `5.0` | The rolling ceiling for the day. |
-| `approval_threshold_usd` | `0.25` | Above this, a request is refused unless explicitly approved. |
+| `approval_threshold_usd` | `0.25` | Estimated cost at or above which a call is held for a person to approve through Hermes' own approval prompt. A call whose cost cannot be estimated — because the catalogue publishes no price for the model — is always held. NEXUS has no argument the model can set to approve its own spend. |
 | `code_max_tokens` | `8192` | The token budget for a call that has to return whole files. The inference client's default of 2048 is enough for a sentence and not enough for a source file: a reply that runs out of budget is cut off mid-JSON. |
 | `preferred_models` | `[]` | Model ids to prefer; earlier entries score higher. |
 | `blocked_models` | `[]` | Model ids NEXUS must never route to. |
@@ -167,8 +167,18 @@ comes back:
 1. **`max_cost_per_run_usd`** — one run may not exceed this estimated cost.
 2. **`daily_budget_usd`** — the rolling daily ceiling across everything NEXUS
    does.
-3. **`approval_threshold_usd`** — a request estimated above this is *refused*
-   unless the caller passes `approve: true`.
+3. **`approval_threshold_usd`** — a request estimated at or above this is
+   *held for a person*. NEXUS hands it to Hermes' own approval prompt, and
+   the person answering that prompt is the only thing that unlocks it.
+
+There is no `approve` argument in any of NEXUS' tool schemas, and there is no
+way for the model to mint an approval for itself. The approval rule is per
+tool, so allowing `nexus_run` for the session does not allow `nexus_media`.
+
+A request whose cost **cannot be worked out** is held as well. That is the
+case for a model the catalogue publishes no price for, and for a catalogue
+NEXUS has not read yet. An unknown cost is not a zero cost, and treating it
+as one is how an uncapped spend happens.
 
 The estimate is the provider's published list price with the model's own
 published discount applied. It is an estimate. NEXUS reports it as one and

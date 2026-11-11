@@ -142,32 +142,42 @@ def _inline_remote_image(reference: str, client: Any, timeout: float) -> str | N
     inlined as a ``data:`` URI is accepted by every model that can see at
     all. So NEXUS fetches the image itself and sends the bytes.
 
+    The URL came from a model, so it is checked before anything connects to
+    it: every hop of the redirect chain has to resolve to a public address,
+    or the fetch is refused. The image type comes from the bytes rather than
+    from the server's ``Content-Type``, because a header is a claim and the
+    bytes are the file.
+
     Returns ``None`` when the image cannot be fetched or is not an image;
     the caller then falls back to sending the URL as it stands.
     """
     import base64 as _base64
 
+    from ..netguard import fetch_public
+    from ..paths import detect_image_type
+
     try:
-        response = client.request(
-            "GET",
-            reference,
-            headers={"Accept": "image/*"},
-            timeout=timeout,
-        )
-    except Exception:
+        fetched = fetch_public(reference, client, timeout)
+    except ValidationError as exc:
+        # The URL points somewhere inside the network. That is a refusal,
+        # not a download failure, so it is not quietly fallen back on.
+        raise ValidationError(f"the image URL was refused: {exc}") from exc
+    if fetched is None:
         return None
+    _, response = fetched
     if not response.ok:
         return None
-    content_type = str(response.headers.get("content-type") or "").split(";")[0].strip().lower()
-    if content_type and content_type not in INLINABLE_IMAGE_TYPES:
-        return None
-    if not content_type:
-        content_type = "image/png"
     raw = response.raw
     if not raw:
         return None
     if len(raw) > MAX_INLINE_IMAGE_BYTES:
         return None
+
+    content_type = detect_image_type(raw[:32])
+    if content_type is None or content_type not in INLINABLE_IMAGE_TYPES:
+        # Not an image, whatever the server said it was.
+        return None
+
     payload = _base64.b64encode(raw).decode("ascii")
     return f"data:{content_type};base64,{payload}"
 
@@ -502,10 +512,23 @@ class VisionModule:
         that accept the link silently ignore the image and answer "I can't
         see an image attached". Inlining sidesteps both behaviours.
 
-        A local path and an existing ``data:`` URI are left exactly as they
-        are. If the download fails the URL is sent as it stands, because a
-        URL that works for some models beats no image for any of them.
+        A remote URL is checked before it is fetched: it has to resolve to
+        a public address, on every hop, or it is refused outright. A URL
+        that points inside the machine's own network is not a failed
+        download — it is something NEXUS will not do.
+
+        A local path is checked as well. It has to be an image file, it has
+        to be one by its contents and not just by its name, and it has to
+        live somewhere NEXUS is allowed to read from — the working
+        directory, its own data directory, or the temporary directory. The
+        profile's own files are never read and never sent.
+
+        An existing ``data:`` URI is left exactly as it is. If the download
+        fails the URL is sent as it stands, because a URL that works for
+        some models beats no image for any of them.
         """
+        from ..paths import is_local_path, resolve_local_image
+
         client = getattr(self.llm_client, "client", None)
         timeout = float(getattr(self.settings, "request_timeout_s", 60))
         prepared: list[str] = []
@@ -513,9 +536,15 @@ class VisionModule:
             if reference.startswith("data:"):
                 prepared.append(reference)
                 continue
-            if reference.startswith(("http://", "https://")) and client is not None:
+            if reference.startswith(("http://", "https://")):
+                if client is None:
+                    prepared.append(reference)
+                    continue
                 inlined = _inline_remote_image(reference, client, timeout)
                 prepared.append(inlined if inlined else reference)
+                continue
+            if is_local_path(reference):
+                prepared.append(resolve_local_image(reference, purpose="read"))
                 continue
             prepared.append(reference)
         return prepared
@@ -573,7 +602,10 @@ class VisionModule:
             )
             try:
                 self.budget.enforce(
-                    estimate, approved=approved, description=f"a vision call to {model.id}"
+                    estimate,
+                    approved=approved,
+                    description=f"a vision call to {model.id}",
+                    price_known=model.price_known,
                 )
             except NexusError as exc:
                 return VisionOutcome(ok=False, error=str(exc), model_id=model.id)

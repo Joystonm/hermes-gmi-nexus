@@ -25,7 +25,8 @@ provides_tools:
   - nexus_media
   - nexus_dev
   - nexus_report
-provides_hooks: []
+provides_hooks:
+  - pre_tool_call
 requires_env:
   - name: GMI_API_KEY
     description: >-
@@ -74,7 +75,7 @@ config_schema:
   approval_threshold_usd:
     type: float
     default: 0.25
-    description: "Estimated cost above which a generation request is refused unless explicitly approved."
+    description: "Estimated cost at or above which a call is held for a person to approve through Hermes' own approval prompt. A call whose cost cannot be estimated — because the catalogue publishes no price for the model — is always held. NEXUS has no argument the model can set to approve its own spend."
   code_max_tokens:
     type: int
     default: 8192

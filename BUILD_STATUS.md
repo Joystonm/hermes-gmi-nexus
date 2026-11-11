@@ -232,7 +232,11 @@ do the real thing.
    never read — and neither method checked the per-run cap, the daily cap
    or the approval threshold before making a call. Every other path in the
    plugin goes through `budget.enforce()` first. The Dev Agent now does
-   too, which makes the parameter mean what its name says.
+   too.
+
+   The parameter itself is gone now, for the reason given below: an
+   `approved` flag that a model could set was never an approval, it was a
+   suggestion.
 
 The live run also surfaced something the plugin should *show* rather than
 hide: the catalogue's own code model,
@@ -242,6 +246,63 @@ The Dev Agent now treats the model list as candidates and passes over one
 that fails, and the report says which model actually ran — which is not the
 one the ROUTE phase published. The demo's RECOVER section reconciles the two
 out loud rather than quietly agreeing with itself.
+
+### What the maintainer review found
+
+Five issues were raised in review of the first pull request. All five are
+fixed, and each fix has its own regression tests — `tests/test_approval.py`
+(36) and `tests/test_safety.py` (41) are new, and `tests/test_dashboard.py`
+grew six.
+
+1. **The model could approve its own spend.** Every spending tool took an
+   `approve: true` that skipped the approval threshold, and the tool results
+   told the model to pass it. That is not an approval mechanism, it is a
+   suggestion the model can make to itself.
+
+   There is no such argument now, in any tool schema. NEXUS registers two
+   `pre_tool_call` hooks: one that estimates a call's cost from the
+   catalogue's own published prices, and one that hands an over-threshold
+   call to **Hermes' own approval prompt**. The person answering that prompt
+   is the only thing that unlocks the call. The unlock is a single-use token
+   — random, bound to the tool and to that call's arguments, expiring after
+   fifteen minutes — held in a ledger inside the plugin, so the model cannot
+   mint one.
+
+   The hook runs offline: it reads only the cached catalogue, the cached
+   media catalogue and the budget snapshot, it never builds an engine, it
+   never makes a network call, and it cannot raise — a hook that raises is
+   treated by Hermes as a block, so a broken estimate fails closed.
+
+2. **A model with no published price was estimated at $0.00** and so passed
+   every cap. An unknown price is not a zero price. `estimate_cost` now
+   raises for an unpriced model, the media router passes over it, the media
+   client refuses to submit the request, the dashboard reports
+   `unit_price_usd: null` rather than a number, and every budget check
+   carries the price's known-ness so the guard escalates to a human.
+
+3. **A local path could be uploaded as an image.** `nexus_media` took an
+   `image` or a `mask` and would open any path it was given — including the
+   profile's `.env`. Paths are now resolved, so a symlink is followed to
+   where it really points; they must be regular files; the extension must
+   name an image type **and** the first bytes must be that image type; and
+   they must live in the working directory, the plugin's own data directory
+   or the system temporary directory. Nothing inside Hermes' home directory
+   is ever read. The same check applies to vision's local paths and to the
+   image the Dev Agent hands to a model.
+
+4. **Vision fetched any model-supplied URL, with redirects on.** The plugin
+   was a way of reading the machine's own network. Now every hop of the
+   redirect chain is resolved and every address must be a public one:
+   private, loopback, link-local, reserved and multicast are refused —
+   `169.254.169.254` among them — as is a host that cannot be resolved. The
+   image type comes from the bytes rather than from a `Content-Type` header
+   that may be missing, and a refused URL is reported as a refusal rather
+   than quietly downgraded to a failed download.
+
+5. **The dashboard manifest pointed at files that were not tracked.** The
+   `dist/` bundle is now in the repository with its source (`dashboard/src/`)
+   and its build script (`dashboard/build.py`), and the tests fail if the
+   manifest and the committed bundle ever drift apart.
 
 ### The demo video, and what measuring it cost
 
@@ -598,20 +659,18 @@ commit.
 
 ```
 $ python -m pytest tests/
-268 passed, 6 skipped in 9.20s
+349 passed, 8 skipped in 16.08s
 ```
 
-On an interpreter carrying Hermes' own `web` pins the same suite was **230
-passed, 5 skipped** — the sixth skip is the environment test that reports the
+On an interpreter carrying Hermes' own `web` pins the same suite is **350
+passed, 7 skipped** — the seventh skip is the environment test that reports the
 `fastapi`/`starlette` mismatch, and it passes once the versions agree. The pins
 are installed into a virtual environment, so the system interpreter is never
-modified. That pinned run was recorded before the suite grew by the fourteen
-resilience tests and the twenty-four narration-claim tests, so the pinned
-figures are behind; they are quoted as they were measured rather than
-restated as current.
+modified.
 
-The 5 skipped tests are the live API tests, skipped because `GMI_LIVE_TESTS`
-is not set. That is their intended behaviour.
+The skipped tests are the live API tests, skipped because `GMI_LIVE_TESTS` is
+not set, and two symlink tests that need a privilege Windows does not grant by
+default. Those are their intended behaviours.
 
 ```
 $ hermes plugins validate ./plugins/gmi-nexus --install-deps
@@ -725,7 +784,7 @@ routes: ['/arena', '/execution', '/models', '/multimodal', '/overview', '/settin
 all handlers async: True
 ```
 
-and the whole suite runs **228 passed, 5 skipped** there — one more test
+and the whole suite runs **350 passed, 7 skipped** there — one more test
 passes and one fewer skips than on the system interpreter, because the
 environment test no longer has to substitute a stub router.
 

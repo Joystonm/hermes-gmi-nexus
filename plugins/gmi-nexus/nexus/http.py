@@ -25,6 +25,9 @@ from .errors import NexusError, RateLimitError, TimeoutError_, TransientError, e
 #: The User-Agent sent with every request to GMI Cloud.
 USER_AGENT = "GMI-NEXUS/1.0 (+Hermes Agent plugin)"
 
+#: The status codes that are a redirect rather than an answer.
+REDIRECT_STATUSES: frozenset[int] = frozenset({301, 302, 303, 307, 308})
+
 
 @dataclass(slots=True)
 class HttpResponse:
@@ -67,6 +70,7 @@ class Transport(Protocol):
         data: Any = None,
         files: Any = None,
         timeout: float = 60.0,
+        follow_redirects: bool = True,
     ) -> HttpResponse: ...
 
 
@@ -96,6 +100,7 @@ class HttpxTransport:
         data: Any = None,
         files: Any = None,
         timeout: float = 60.0,
+        follow_redirects: bool = True,
     ) -> HttpResponse:
         client = self._ensure_client()
         started = time.perf_counter()
@@ -108,6 +113,7 @@ class HttpxTransport:
                 data=data,
                 files=files,
                 timeout=timeout,
+                follow_redirects=follow_redirects,
             )
         except Exception as exc:
             raise _transport_error(exc) from exc
@@ -141,6 +147,7 @@ class UrllibTransport:
         data: Any = None,
         files: Any = None,
         timeout: float = 60.0,
+        follow_redirects: bool = True,
     ) -> HttpResponse:
         import urllib.error
         import urllib.request
@@ -156,7 +163,7 @@ class UrllibTransport:
         request = urllib.request.Request(url, data=payload, headers=request_headers, method=method.upper())
         started = time.perf_counter()
         try:
-            with urllib.request.urlopen(request, timeout=timeout) as response:
+            with _open(request, timeout=timeout, follow_redirects=follow_redirects) as response:
                 raw = response.read()
                 body = raw.decode("utf-8", errors="replace")
                 elapsed = int((time.perf_counter() - started) * 1000)
@@ -170,7 +177,16 @@ class UrllibTransport:
         except urllib.error.HTTPError as exc:
             body = exc.read().decode("utf-8", errors="replace") if exc.fp else ""
             elapsed = int((time.perf_counter() - started) * 1000)
-            return HttpResponse(status=exc.code, body=body, elapsed_ms=elapsed)
+            # The headers are kept: a redirect that was not followed is
+            # reported through its ``Location`` header, and the caller has to
+            # see it to decide whether the new host is safe to fetch.
+            headers_out = {k.lower(): v for k, v in (exc.headers or {}).items()}
+            return HttpResponse(
+                status=exc.code,
+                body=body,
+                headers=headers_out,
+                elapsed_ms=elapsed,
+            )
         except Exception as exc:
             raise _transport_error(exc) from exc
 
@@ -183,6 +199,35 @@ def _with_user_agent(headers: dict[str, str] | None) -> dict[str, str]:
     merged = dict(headers or {})
     merged.setdefault("User-Agent", USER_AGENT)
     return merged
+
+
+def _open(request: Any, *, timeout: float, follow_redirects: bool) -> Any:
+    """Open a request, following redirects or not.
+
+    ``urllib`` follows redirects by default and gives no way to inspect the
+    new host before it connects to it. When a caller asks for redirects not
+    to be followed, the redirect handler is replaced with one that refuses,
+    so the 3xx comes back as a response and the caller can check where it
+    points before fetching it.
+    """
+    import urllib.request
+
+    if follow_redirects:
+        return urllib.request.urlopen(request, timeout=timeout)
+
+    class _NoRedirect(urllib.request.HTTPRedirectHandler):
+        """Refuses to follow a redirect.
+
+        Returning ``None`` from ``redirect_request`` tells urllib not to
+        follow it, so the 3xx comes back as an error the caller can read —
+        including its ``Location`` header — instead of a request that has
+        already gone somewhere unvetted.
+        """
+
+        def redirect_request(self, *args: Any, **kwargs: Any) -> None:
+            return None
+
+    return urllib.request.build_opener(_NoRedirect()).open(request, timeout=timeout)
 
 
 def _transport_error(exc: Exception) -> NexusError:
@@ -237,11 +282,17 @@ class HttpClient:
         files: Any = None,
         timeout: float | None = None,
         retry: bool = True,
+        follow_redirects: bool = True,
     ) -> HttpResponse:
         """Perform a request, retrying transient failures with backoff.
 
         Retries are bounded by ``max_retries``; a 4xx is never retried because
         repeating a rejected request cannot change the answer.
+
+        When ``follow_redirects`` is false the redirect itself comes back as
+        a response instead of being followed. A caller that has to check
+        where a redirect points — a URL a model supplied, say — needs to see
+        it before anything connects to the new host.
         """
         effective_timeout = self.timeout if timeout is None else float(timeout)
         attempts = 0
@@ -257,6 +308,7 @@ class HttpClient:
                     data=data,
                     files=files,
                     timeout=effective_timeout,
+                    follow_redirects=follow_redirects,
                 )
             except NexusError as exc:
                 last_error = exc
@@ -266,6 +318,10 @@ class HttpClient:
                 continue
 
             if response.ok:
+                return response
+
+            if not follow_redirects and response.status in REDIRECT_STATUSES:
+                # The caller asked to see the redirect rather than follow it.
                 return response
 
             error = error_from_response(response.status, response.body)
@@ -304,6 +360,7 @@ __all__ = [
     "HttpResponse",
     "HttpxTransport",
     "RateLimitError",
+    "REDIRECT_STATUSES",
     "Transport",
     "USER_AGENT",
     "UrllibTransport",

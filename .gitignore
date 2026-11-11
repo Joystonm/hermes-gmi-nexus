@@ -11,9 +11,13 @@ __pycache__/
 .coverage
 htmlcov/
 
-# Packaging artefacts
-build/
-dist/
+# Packaging artefacts. These are anchored to the repository root: the
+# dashboard's own build output lives in plugins/gmi-nexus/dashboard/dist/
+# and has to be tracked, because the dashboard manifest points at it and a
+# manifest pointing at a file that is not in the repository renders a blank
+# tab.
+/build/
+/dist/
 *.egg-info/
 
 # Local environments

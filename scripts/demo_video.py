@@ -198,13 +198,47 @@ class Reel:
 
 
 def call(box: NexusToolBox, tool: str, args: dict[str, Any]) -> dict[str, Any]:
-    """Call one of the plugin's own tool handlers and parse its reply."""
-    raw = getattr(box, tool)(args)
+    """Call one of the plugin's own tool handlers and parse its reply.
+
+    A call that may spend money is unlocked with a token the plugin's own
+    ledger mints, exactly as Hermes' ``pre_tool_call`` hook mints one once
+    a person has answered the approval prompt. The plugin has no argument
+    the *model* can set to approve its own spend, and this script is not a
+    model: it is the person running it, who passed ``--approve-spend``.
+    """
+    raw = getattr(box, tool)(_approved_args(box, tool, args))
     try:
         payload = json.loads(raw)
     except (TypeError, ValueError):
         payload = {"raw": str(raw)}
     return payload if isinstance(payload, dict) else {"result": payload}
+
+
+def _approved_args(box: NexusToolBox, tool: str, args: dict[str, Any]) -> dict[str, Any]:
+    """Attach the operator's approval to a call that may spend money.
+
+    The authorisation is a single-use token, bound to the tool and to the
+    arguments of this one call, kept in a ledger inside the plugin. It is
+    what the ``pre_tool_call`` hook issues inside Hermes after a person has
+    answered the prompt, and it is what ``--approve-spend`` means here: *a
+    person* said yes.
+    """
+    from nexus.approval import APPROVAL_TOKEN_KEY, SPENDING_TOOLS, approver
+
+    if tool not in SPENDING_TOOLS:
+        return args
+    try:
+        ceiling = float(box.settings().max_cost_per_run_usd)
+    except Exception:
+        ceiling = 0.0
+    prepared = dict(args)
+    prepared[APPROVAL_TOKEN_KEY] = approver().issue(
+        tool,
+        prepared,
+        estimated_usd=None,
+        ceiling_usd=ceiling,
+    )
+    return prepared
 
 
 def carried_issues(issues: list[dict[str, Any]]) -> list[str]:
@@ -401,7 +435,6 @@ def main(argv: list[str] | None = None) -> int:
                     # is a tenth of the time spent moving it into the vision
                     # model in the next phase.
                     "options": {"output_format": "jpeg"},
-                    "approve": True,
                 },
             )
             if not asset.get("deduplicated"):
@@ -441,7 +474,6 @@ def main(argv: list[str] | None = None) -> int:
                     "mode": "issues",
                     "images": [image],
                     "criteria": "composition, contrast, balance and how it would sit behind text",
-                    "approve": True,
                 },
             )
             if inspection.get("error"):
@@ -475,7 +507,6 @@ def main(argv: list[str] | None = None) -> int:
                 "mode": "implement",
                 "task": task,
                 "test_command": TEST_COMMAND,
-                "approve": True,
             },
         )
         if outcome.get("error"):

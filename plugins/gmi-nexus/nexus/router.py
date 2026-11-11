@@ -136,8 +136,16 @@ def _latency_score(latency_ms: float) -> float:
     return 1.0 / (1.0 + latency_ms / LATENCY_HALF_LIFE_MS)
 
 
-def _cost_score(cost_usd: float) -> float:
-    """Map a cost to 0..1, where cheaper is better."""
+def _cost_score(cost_usd: float, *, price_known: bool = True) -> float:
+    """Map a cost to 0..1, where cheaper is better.
+
+    A model whose price the catalogue does not publish is scored neutrally
+    rather than as the cheapest model there is. Treating an unknown price as
+    zero would make NEXUS prefer exactly the models it cannot cost — and
+    every call to one of them would then have to stop and ask a human.
+    """
+    if not price_known:
+        return 0.5
     if cost_usd <= 0:
         return 0.9
     return 1.0 / (1.0 + cost_usd / COST_HALF_LIFE_USD)
@@ -242,8 +250,15 @@ class Router:
             completion_tokens=expected_output_tokens,
             requests=1,
         )
-        cost = _cost_score(estimated)
-        reasons.append(f"cost: ~${estimated:.6f} estimated at list price")
+        price_known = model.price_known
+        cost = _cost_score(estimated, price_known=price_known)
+        if price_known:
+            reasons.append(f"cost: ~${estimated:.6f} estimated at list price")
+        else:
+            reasons.append(
+                "cost: the catalogue publishes no price for this model, so its "
+                "cost is unknown and it is scored neutrally"
+            )
 
         score = (
             weights["quality"] * quality

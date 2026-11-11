@@ -26,8 +26,6 @@ from __future__ import annotations
 
 import base64
 import json
-import mimetypes
-import os
 import time
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Sequence
@@ -100,14 +98,23 @@ class LLMResponse:
 
 
 def encode_image(path: str) -> str:
-    """Return a ``data:`` URI for a local image file."""
-    if not os.path.exists(path):
-        raise ValidationError(f"image file does not exist: {path}")
-    mime, _ = mimetypes.guess_type(path)
-    if not mime or not mime.startswith("image/"):
-        raise ValidationError(f"not a recognised image file: {path}")
-    with open(path, "rb") as handle:
+    """Return a ``data:`` URI for a local image file.
+
+    The path is checked, not trusted: it has to be an image file — by its
+    contents, not only by its name — and it has to live somewhere NEXUS is
+    allowed to read from. A path named by a model is a path, and a path can
+    be a profile's ``.env``.
+    """
+    from ..paths import detect_image_type, resolve_local_image
+
+    resolved = resolve_local_image(path, purpose="sent")
+    with open(resolved, "rb") as handle:
+        head = handle.read(32)
+        handle.seek(0)
         payload = base64.b64encode(handle.read()).decode("ascii")
+    mime = detect_image_type(head)
+    if mime is None:
+        raise ValidationError(f"not a recognised image file: {path}")
     return f"data:{mime};base64,{payload}"
 
 
