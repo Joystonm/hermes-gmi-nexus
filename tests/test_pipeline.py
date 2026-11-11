@@ -423,6 +423,21 @@ def _execute(settings, transport, step):
     )
 
 
+def _execute_with_engine(settings, transport, step):
+    """The same, but the engine comes back too — it holds the budget ledger."""
+    from nexus.executor import ExecutionContext
+
+    engine = _engine(settings, transport)
+    decision = engine.executor.preview_route(step)
+    result = engine.executor.execute(
+        step,
+        ExecutionContext(),
+        decision,
+        approved=True,
+    )
+    return engine, result
+
+
 def test_a_code_bearing_step_asks_for_room_to_write_a_whole_file(settings):
     """A coding step gets the configured budget, not the prose default."""
     transport = FakeTransport(chat_reply="A complete and useful answer.")
@@ -435,12 +450,27 @@ def test_a_code_bearing_step_asks_for_room_to_write_a_whole_file(settings):
 
 
 def test_a_prose_step_still_gets_the_prose_default(settings):
-    """A step that answers in prose is not given a file-sized budget."""
+    """A step that answers in prose gets the configured prose budget."""
     transport = FakeTransport(chat_reply="A complete and useful answer.")
     _execute(settings, transport, _prose_step())
 
     body = transport.chat_requests()[0]["body"]
-    assert body["max_tokens"] == 2048
+    assert body["max_tokens"] == settings.max_tokens
+
+
+def test_a_prose_step_has_room_for_a_reasoning_model_to_answer(settings):
+    """The budget has to hold the reasoning as well as the answer.
+
+    A live run of the demo scenario showed what happens when it does not:
+    DeepSeek-V4-Flash spent all 2048 of its completion tokens on reasoning,
+    was cut off mid-thought, and returned no text at all.
+    """
+    assert settings.max_tokens > 2048
+
+    transport = FakeTransport(chat_reply="A complete and useful answer.")
+    _execute(settings, transport, _prose_step())
+
+    assert transport.chat_requests()[0]["body"]["max_tokens"] == settings.max_tokens
 
 
 def test_a_reply_cut_off_by_the_token_limit_is_named_as_such(settings):
@@ -467,3 +497,90 @@ def test_a_cut_off_code_reply_is_also_reported_as_incomplete(settings):
 
     assert result.status == "ok"
     assert any("cut off" in note for note in result.fallbacks)
+
+
+# --------------------------------------------------------------------------- #
+# An empty answer is not an answer
+# --------------------------------------------------------------------------- #
+#
+# A live run of the demo scenario ended with the run status ``partial``
+# because one of its six steps came back with no text at all. The provider
+# had sent ``content: null``: the model spent its whole token budget on
+# reasoning and was cut off before it said anything.
+#
+# The executor recorded that step as ``ok`` with an empty body and never
+# tried the next routed model, so the run's own step table said the work
+# had been done when it had not. The evaluator noticed the empty answer
+# afterwards and downgraded the run — but the recovery never fired, and the
+# step was still recorded as a success.
+
+
+def test_an_empty_reply_is_not_a_successful_step(settings):
+    """A model that says nothing has not done the work."""
+    transport = FakeTransport(chat_replies=[None, "A complete and useful answer."])
+    result = _execute(settings, transport, _prose_step())
+
+    assert result.status == "ok"
+    assert result.output == "A complete and useful answer."
+    # The empty attempt was not swallowed: it is named in the fallbacks.
+    assert any("returned no text" in note for note in result.fallbacks), (
+        f"the empty reply was not reported: {result.fallbacks}"
+    )
+    # And the next routed model was given its turn.
+    assert len(result.attempted) == 2, result.attempted
+    assert result.attempted[0] != result.model_id
+
+
+def test_a_step_where_every_model_says_nothing_fails_with_the_reason(settings):
+    """When nothing answers, the step fails and says why."""
+    transport = FakeTransport(chat_replies=[None] * 5)
+    result = _execute(settings, transport, _prose_step())
+
+    assert result.status == "failed"
+    assert result.output == ""
+    assert result.error is not None
+    assert result.error["kind"] == "EmptyResponse"
+    assert "returned no text" in result.error["message"]
+
+
+def test_an_empty_reply_that_was_cut_off_names_the_token_limit(settings):
+    """The reason it said nothing is part of the reason it failed."""
+    transport = FakeTransport(
+        chat_replies=[None] * 5,
+        chat_finish_reasons=["length"] * 5,
+    )
+    result = _execute(settings, transport, _prose_step())
+
+    assert result.status == "failed"
+    assert result.error is not None
+    assert "token limit" in result.error["message"]
+
+
+def test_the_cost_of_an_empty_reply_is_still_recorded(settings):
+    """The provider charged for the tokens, so the ledger counts them.
+
+    An empty reply is not free: the model was billed for every token it
+    reasoned with. Leaving that out of the ledger would under-report what
+    the run spent.
+    """
+    answered = FakeTransport(chat_reply="A complete and useful answer.")
+    engine, result = _execute_with_engine(settings, answered, _prose_step())
+    one_call = engine.executor.budget.snapshot()["run_spend_usd"]
+
+    emptied = FakeTransport(chat_replies=[None, "A complete and useful answer."])
+    engine, result = _execute_with_engine(settings, emptied, _prose_step())
+    two_calls = engine.executor.budget.snapshot()["run_spend_usd"]
+
+    assert two_calls > one_call
+    assert result.estimated_cost_usd > 0
+
+
+def test_a_reply_with_text_is_still_a_success(settings):
+    """The empty-reply rule does not touch a reply that says something."""
+    transport = FakeTransport(chat_reply="A complete and useful answer.")
+    result = _execute(settings, transport, _prose_step())
+
+    assert result.status == "ok"
+    assert result.output == "A complete and useful answer."
+    assert len(result.attempted) == 1
+    assert not any("returned no text" in note for note in result.fallbacks)

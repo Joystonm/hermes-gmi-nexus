@@ -20,7 +20,7 @@ Not against a mock. The plugin has been run against GMI Cloud itself — real
 inference, real vision, real image generation, and real code written and
 tested through Hermes' own tools.
 
-That is how **ten defects** surfaced which mocked tests could not find. Among
+That is how **eleven defects** surfaced which mocked tests could not find. Among
 them: a catalogue model that answered `"456"` for a number it had never seen,
 which passed a capability probe written in a way that could be answered by
 luck; a code model whose replies came back cut off mid-JSON because the
@@ -29,7 +29,7 @@ when the request was at fault; a reported generation latency of 0.4
 seconds for a generation that had really taken half a minute, because the
 clock started after the queue had already done the work; and a rejected API
 key that was reported as an empty catalogue rather than as a rejected key.
-All ten are fixed and all ten have regression tests. The whole live
+All eleven are fixed and all eleven have regression tests. The whole live
 exercise cost **just over $1** of the project's $10 ceiling.
 
 The last two came out of the final recorded run. GMI Cloud's catalogue still

@@ -167,8 +167,8 @@ of every live call is computed from the catalogue's published rates. These
 are **estimates at list price**, not bills, and they are labelled as such
 everywhere they appear.
 
-The live exercise found ten defects that the mocked suite could not, and
-all ten are fixed:
+The live exercise found eleven defects that the mocked suite could not, and
+all eleven are fixed:
 
 1. **The multimodal part type was spelled the wrong way.** The vision path
    sent `{"type": "image"}` — the Anthropic spelling. GMI's endpoint is
@@ -264,6 +264,31 @@ all ten are fixed:
 
     The last two have **fourteen regression tests** between them, in
     `tests/test_resilience.py`.
+
+11. **An empty reply was recorded as a step that had succeeded.** The final
+    live run of the demo scenario came back with the status `partial`,
+    because one of its six steps — *"Write the section copy and call to
+    action"* — had produced no text at all. The provider had sent
+    `content: null`: `deepseek-ai/DeepSeek-V4-Flash` spent all 2048 of its
+    completion tokens on `reasoning_content`, was cut off mid-thought
+    (`finish_reason: "length"`), and said nothing. The plugin read that
+    correctly — the answer really was empty — but the executor recorded the
+    step as `ok` with an empty body and **never tried the next routed
+    model**, so the run's own step table said the work had been done when it
+    had not. The evaluator noticed the empty answer afterwards and
+    downgraded the run, but the recovery never fired and the step was still
+    recorded as a success. An empty reply is now a **failed attempt**: the
+    next routed model gets its turn, a step where nothing answers fails with
+    `EmptyResponse` and says why, and the tokens the provider charged for
+    are still counted, because a reply that says nothing is not free. The
+    prose budget was also too small for a reasoning model — 2048 tokens is
+    room for the reasoning *or* the answer, not both — and is now
+    configurable (`max_tokens`, 4096 by default) for the same reason the
+    file budget is: a limit is a cap and not a charge, so a model that
+    answers in 200 tokens is still billed for 200.
+
+    The probe that separated the plugin from the model is
+    `scripts/probes/probe_empty_reply.py`.
 
 The live run also showed that the catalogue's own code model,
 `Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8`, answers **every** request with

@@ -55,10 +55,6 @@ MAX_CONTEXT_CHARS = 12000
 #: The largest single model reply NEXUS will accept into the run context.
 MAX_OUTPUT_CHARS = 20000
 
-#: The token budget for a step whose answer is prose. It matches the
-#: inference client's own default.
-DEFAULT_MAX_TOKENS = 2048
-
 #: The task types whose answer can be a whole file rather than a sentence.
 #: A reply that runs out of budget is cut off mid-JSON or mid-sentence, so
 #: these steps ask for the configured ``code_max_tokens`` instead.
@@ -352,6 +348,47 @@ class Executor:
                 result.fallbacks.append(f"{model.id}: {exc}")
                 continue
 
+            # The step's cost, priced from the provider's own reported usage.
+            # Without this the run's total would leave out every language
+            # model call and under-report what was spent. It is recorded
+            # *before* the answer is looked at, because a call that came back
+            # empty was still billed: the provider spent the tokens whether
+            # or not the model said anything with them.
+            self.budget.record(
+                "llm",
+                model.id,
+                response.usage.cost_usd,
+                prompt_tokens=response.usage.prompt_tokens,
+                completion_tokens=response.usage.completion_tokens,
+                requests=response.usage.requests,
+                detail=step.description[:200],
+            )
+            result.estimated_cost_usd += response.usage.cost_usd
+
+            # A call that came back with no text is not an answer. A
+            # reasoning model can spend its whole token budget thinking and
+            # be cut off before it says anything, and the provider then sends
+            # ``content: null``. Recording that as a successful step would
+            # claim work that never happened, so it counts as a failed
+            # attempt and the next routed model gets its turn.
+            if not (response.text or "").strip():
+                last_error = {
+                    "kind": "EmptyResponse",
+                    "message": (
+                        f"{model.id} returned no text"
+                        + (
+                            f"; it was cut off at the token limit "
+                            f"({token_budget} tokens)"
+                            if response.finish_reason == "length"
+                            else ""
+                        )
+                    ),
+                }
+                result.fallbacks.append(f"{model.id}: {last_error['message']}")
+                result.attempts = attempts
+                result.usage = response.usage
+                continue
+
             result.status = "ok"
             result.model_id = model.id
             result.output = response.text
@@ -366,20 +403,7 @@ class Executor:
                     f"the reply was cut off at the model's token limit "
                     f"({token_budget} tokens); the answer above is incomplete"
                 )
-            # The step's cost, priced from the provider's own reported usage.
-            # Without this the run's total would leave out every language
-            # model call and under-report what was spent.
-            result.estimated_cost_usd = response.usage.cost_usd
             result.latency_ms = response.latency_ms or result.latency_ms
-            self.budget.record(
-                "llm",
-                model.id,
-                response.usage.cost_usd,
-                prompt_tokens=response.usage.prompt_tokens,
-                completion_tokens=response.usage.completion_tokens,
-                requests=response.usage.requests,
-                detail=step.description[:200],
-            )
             return
 
         result.status = "failed"
@@ -414,11 +438,18 @@ class Executor:
         A step that produces code can produce a whole file, and a reply that
         runs out of budget is cut off mid-sentence. Code-bearing steps
         therefore get the configured ``code_max_tokens``; a step that answers
-        in prose gets the client's ordinary default.
+        in prose gets the configured ``max_tokens``.
+
+        The prose budget is not as small as it looks. A reasoning model
+        spends part of it thinking before it answers, and a live run showed a
+        model using all 2048 of its completion tokens on reasoning, being
+        cut off mid-thought and returning no text at all — a step that
+        looked successful and was not. The budget now leaves room for the
+        reasoning and the answer.
         """
         if step.task_type in _CODE_BEARING_TASKS:
             return max(1024, int(self.settings.code_max_tokens))
-        return DEFAULT_MAX_TOKENS
+        return int(self.settings.max_tokens)
 
     def _estimate_llm_cost(
         self,

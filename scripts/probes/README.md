@@ -41,6 +41,11 @@ billed amount, and none of them pretends to.
 
 | Script | The question it asks |
 | --- | --- |
+| `probe_empty_reply.py` | Asks the model that answered a live prose step with nothing the same question again, with the same token budget, and prints the provider's **raw** reply — its finish reason, its `content`, its `reasoning_content` and its usage. It is what told the plugin apart from the model: the provider sent `content: null` with `finish_reason: "length"` and 2048 `reasoning_tokens`, so the model had spent its whole budget thinking and said nothing. |
+
+
+| Script | The question it asks |
+| --- | --- |
 | `probe_dev_agent_400.py` | Prints what the catalogue publishes about the code model the live demo failed on, then tries the same prompt with different parameter sets — to find which one the endpoint rejects. |
 | `probe_dev_reply.py` | Sends the real implement prompt to the real model and prints the raw reply, so the failure can be *seen* rather than guessed at. |
 | `probe_dev_raw.py` | Prints the raw response payload — its keys, its finish reason, and every string field it contains — so an empty reply can be explained rather than guessed at. |

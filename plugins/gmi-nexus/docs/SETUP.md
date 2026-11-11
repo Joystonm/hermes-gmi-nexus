@@ -126,6 +126,7 @@ plugins:
         daily_budget_usd: 5.0
         approval_threshold_usd: 0.25
         code_max_tokens: 8192
+        max_tokens: 4096
         preferred_models: []
         blocked_models: []
         verify_vision_capability: true
@@ -146,6 +147,7 @@ plugins:
 | `daily_budget_usd` | `5.0` | The rolling ceiling for the day. |
 | `approval_threshold_usd` | `0.25` | Estimated cost at or above which a call is held for a person to approve through Hermes' own approval prompt. A call whose cost cannot be estimated — because the catalogue publishes no price for the model — is always held. NEXUS has no argument the model can set to approve its own spend. |
 | `code_max_tokens` | `8192` | The token budget for a call that has to return whole files. The inference client's default of 2048 is enough for a sentence and not enough for a source file: a reply that runs out of budget is cut off mid-JSON. |
+| `max_tokens` | `4096` | The token budget for a call that answers in prose. A reasoning model spends part of it thinking before it answers: 2048 is room for the reasoning *or* the answer, not both, and a model that runs out mid-thought returns nothing at all. A limit is a cap and not a charge, so a model that answers in 200 tokens is still billed for 200. |
 | `preferred_models` | `[]` | Model ids to prefer; earlier entries score higher. |
 | `blocked_models` | `[]` | Model ids NEXUS must never route to. |
 | `verify_vision_capability` | `true` | Probe a model with a tiny image — a randomly drawn three-digit number — before trusting it for vision tasks. |

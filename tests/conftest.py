@@ -237,6 +237,8 @@ class FakeTransport:
         probe_reply: str = PROBE_NUMBER,
         chat_finish_reason: str = "stop",
         submit_delay: float = 0.0,
+        chat_replies: list[Any] | None = None,
+        chat_finish_reasons: list[str] | None = None,
     ) -> None:
         self.catalogue = catalogue if catalogue is not None else SAMPLE_CATALOGUE
         self.media_ids = media_ids if media_ids is not None else list(SAMPLE_MEDIA_IDS)
@@ -257,6 +259,15 @@ class FakeTransport:
         #: reply was cut off by the token limit, which is what a real code
         #: model does when the request asks for more room than it was given.
         self.chat_finish_reason = chat_finish_reason
+        #: The reply for each chat call in turn. A ``None`` entry is a
+        #: provider that answers with a null body, which is what a reasoning
+        #: model does when it spends its whole token budget thinking and is
+        #: cut off before it says anything. Calls past the end of the list
+        #: fall back to ``chat_reply``.
+        self.chat_replies = list(chat_replies) if chat_replies else []
+        #: The finish reason for each chat call in turn, falling back to
+        #: ``chat_finish_reason``.
+        self.chat_finish_reasons = list(chat_finish_reasons) if chat_finish_reasons else []
         #: How long the submission call blocks for, in seconds. The real
         #: request queue holds the create call open while the request is
         #: admitted and processed, so a mock that returns instantly would
@@ -321,6 +332,11 @@ class FakeTransport:
             if status != 200:
                 return self._json(status, {"error": {"message": "mock failure"}})
             reply = self.chat_reply
+            if chat_index < len(self.chat_replies):
+                reply = self.chat_replies[chat_index]
+            finish_reason = self.chat_finish_reason
+            if chat_index < len(self.chat_finish_reasons):
+                finish_reason = self.chat_finish_reasons[chat_index]
             if _is_probe_request(json_body):
                 # The capability probe asks for a three-digit number that was
                 # drawn as pixels. A model that can see reads it back; this
@@ -336,7 +352,7 @@ class FakeTransport:
                         {
                             "index": 0,
                             "message": {"role": "assistant", "content": reply},
-                            "finish_reason": self.chat_finish_reason,
+                            "finish_reason": finish_reason,
                         }
                     ],
                     "usage": {

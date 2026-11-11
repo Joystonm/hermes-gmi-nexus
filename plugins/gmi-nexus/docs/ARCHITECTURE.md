@@ -162,6 +162,15 @@ most `MAX_STEP_CALLS = 4` provider calls for one planned step (recovery
 included) and at most `MAX_RECOVERIES = 2` recoveries per run. The models a
 step has already tried are excluded from its retry candidates.
 
+A reply that comes back **empty** is a failure of that attempt, not a success.
+A reasoning model can spend its whole token budget thinking and be cut off
+before it says anything, and the provider then sends `content: null` — a
+successful HTTP call with nothing in it. Recording that as a step that had
+succeeded would put a claim of finished work into the run's own table, so the
+executor treats it as a failed attempt, gives the next routed model its turn,
+and fails the step with `EmptyResponse` if nothing answers. The tokens were
+still billed, so they are still counted.
+
 ### Learning changes the routing, not the model
 
 `nexus/storage.py` keeps a per-model, per-task-type row of runs, successes,

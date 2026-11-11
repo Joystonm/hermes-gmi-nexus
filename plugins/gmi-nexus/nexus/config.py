@@ -90,6 +90,16 @@ class Settings:
     #: too small. The Dev Agent asks for a file at a time, so it asks for
     #: room to write one.
     code_max_tokens: int = 8192
+    #: The token budget for a call that answers in prose.
+    #:
+    #: A reasoning model spends part of this budget thinking before it
+    #: answers, and a live run showed what happens when there is not enough
+    #: room for both: DeepSeek-V4-Flash used all 2048 of its completion
+    #: tokens on reasoning, was cut off mid-thought and returned no text at
+    #: all. A limit is a cap and not a charge — a model that answers in 200
+    #: tokens is still billed for 200 — so the cap is set where a reasoning
+    #: model has room for the reasoning *and* the answer.
+    max_tokens: int = 4096
     preferred_models: list[str] = field(default_factory=list)
     blocked_models: list[str] = field(default_factory=list)
     verify_vision_capability: bool = True
@@ -116,6 +126,8 @@ class Settings:
             raise ConfigError("approval_threshold_usd cannot be negative")
         if self.code_max_tokens < 512 or self.code_max_tokens > 65536:
             raise ConfigError("code_max_tokens must be between 512 and 65536")
+        if self.max_tokens < 512 or self.max_tokens > 65536:
+            raise ConfigError("max_tokens must be between 512 and 65536")
         if self.retention_days < 1:
             raise ConfigError("retention_days must be at least 1")
 
@@ -133,6 +145,7 @@ class Settings:
             "daily_budget_usd": self.daily_budget_usd,
             "approval_threshold_usd": self.approval_threshold_usd,
             "code_max_tokens": self.code_max_tokens,
+            "max_tokens": self.max_tokens,
             "preferred_models": list(self.preferred_models),
             "blocked_models": list(self.blocked_models),
             "verify_vision_capability": self.verify_vision_capability,
@@ -223,6 +236,7 @@ def resolve_settings(ctx: Any | None = None) -> Settings:
     settings.daily_budget_usd = _as_float(cfg("daily_budget_usd", settings.daily_budget_usd), settings.daily_budget_usd)
     settings.approval_threshold_usd = _as_float(cfg("approval_threshold_usd", settings.approval_threshold_usd), settings.approval_threshold_usd)
     settings.code_max_tokens = _as_int(cfg("code_max_tokens", settings.code_max_tokens), settings.code_max_tokens)
+    settings.max_tokens = _as_int(cfg("max_tokens", settings.max_tokens), settings.max_tokens)
     settings.preferred_models = _as_list(cfg("preferred_models", settings.preferred_models))
     settings.blocked_models = _as_list(cfg("blocked_models", settings.blocked_models))
     settings.verify_vision_capability = _as_bool(cfg("verify_vision_capability", settings.verify_vision_capability), settings.verify_vision_capability)
