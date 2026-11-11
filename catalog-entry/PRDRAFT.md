@@ -7,11 +7,11 @@ ROUTE → EXECUTE → EVALUATE → RECOVER → LEARN → REPORT** — and report
 actually ran, what it cost and what failed.
 
 - **Repository:** https://github.com/Joystonm/hermes-gmi-nexus
-- **Pinned commit:** `c1b2c105b4485194f31f1037f953e76537d8ad19`
+- **Pinned commit:** `7b2d8c5eb7578d73f4f58907f9ddfe5e2da58fe9`
 - **Subdirectory:** `plugins/gmi-nexus`
 - **Maintainer:** Joystonm
 - **Category:** `models` · **Tier:** `community` · **Requires Hermes:** `>=0.21.6`
-- **Demo:** [`docs/demo/gmi-nexus-demo.mp4`](https://github.com/Joystonm/hermes-gmi-nexus/blob/c1b2c105b4485194f31f1037f953e76537d8ad19/docs/demo/gmi-nexus-demo.mp4) — 80 seconds, one continuous live run, with narration. Every number in it came out of that run; nothing in it was drawn by hand.
+- **Demo:** [`docs/demo/gmi-nexus-demo.mp4`](https://github.com/Joystonm/hermes-gmi-nexus/blob/7b2d8c5eb7578d73f4f58907f9ddfe5e2da58fe9/docs/demo/gmi-nexus-demo.mp4) — 80 seconds, one continuous live run, with narration. Every number in it came out of that run; nothing in it was drawn by hand.
 
 ## What this plugin does
 
@@ -108,10 +108,10 @@ plugin's own README, which is the page the catalog renders.
 Four levels, kept separate; see the plugin's
 `docs/HERMES_VALIDATION.md` for the full report.
 
-1. **Unit** — 357 tests collected: **349 passed, 8 skipped** (the live ones,
+1. **Unit** — 363 tests collected: **355 passed, 8 skipped** (the live ones,
    and two symlink tests that need a privilege Windows does not grant by
    default), all passing. No network, no cost. Under Hermes' own `web` pins
-   the same suite was recorded at **350 passed, 7 skipped**, with the real
+   the same suite is recorded at **356 passed, 7 skipped**, with the real
    `fastapi` router loaded. (That pinned figure was recorded before the suite
    grew by the tests covering the generation-latency fix, the retired-model
    verdict, the malformed-JSON repair and the narration's claim check.)
@@ -137,8 +137,8 @@ Four levels, kept separate; see the plugin's
 ### What the live run found that the mocked tests could not
 
 Worth saying plainly, because it is the argument for running a plugin
-against the real service rather than only against a mock. Ten defects were
-found this way and all ten are fixed:
+against the real service rather than only against a mock. Eleven defects were
+found this way and all eleven are fixed:
 
 * the multimodal message part was spelled the Anthropic way (`image`)
   instead of the OpenAI-compatible way (`image_url`), which some models
@@ -189,8 +189,28 @@ found this way and all ten are fixed:
   model's own unusable reply, the exact shape it must use, and the rule
   that a newline inside a string is written as `\n`.
 
+* an empty reply was recorded as a step that had **succeeded**. The final
+  live run came back with the status `partial`, because one of its six
+  steps produced no text at all: the provider had sent `content: null`,
+  and one live probe showed why — the model spent all 2048 of its
+  completion tokens on `reasoning_content`, was cut off mid-thought
+  (`finish_reason: "length"`) and said nothing. The plugin read that
+  correctly, but the executor returned on the first candidate whose call
+  did not raise, so a null body became `status: ok` with an empty output
+  and **the next routed model was never tried**. The evaluator noticed
+  afterwards and downgraded the run, but the recovery never fired and the
+  step table still said the work had been done. An empty reply is now a
+  failed attempt: the next model gets its turn, a step where nothing
+  answers fails with `EmptyResponse` and says why, and the tokens the
+  provider charged for are still counted. The prose budget was also too
+  small for a reasoning model — 2048 tokens is room for the reasoning
+  *or* the answer, not both — and is now configurable (`max_tokens`,
+  4096 by default), for the same reason the file budget is: a limit is a
+  cap and not a charge.
+
 Each has a regression test — fourteen of them for the last two alone, in
-`tests/test_resilience.py`.
+`tests/test_resilience.py`, and six more for the empty reply, in
+`tests/test_pipeline.py`.
 
 ### What a maintainer review found
 
@@ -295,5 +315,5 @@ and say why. It never shows a number NEXUS did not measure.
   the only thing in the repository that needs a third-party package (Pillow),
   it is not in the plugin payload, and the plugin itself still imports nothing
   but the standard library.
-* The one-off scripts that found seven of the ten defects live in `scripts/probes/`,
+* The one-off scripts that found seven of the eleven defects live in `scripts/probes/`,
   outside the plugin, each documented in that directory's README.
