@@ -304,6 +304,55 @@ grew six.
    and its build script (`dashboard/build.py`), and the tests fail if the
    manifest and the committed bundle ever drift apart.
 
+### What the last live run found
+
+One more, and it came out of the live run rather than out of a probe.
+
+The final live run of the demo scenario came back with the status
+`partial`: one of its six steps produced no text at all. The plugin
+reported that honestly, which is what it is supposed to do, but the
+question worth answering was whether the *plugin* dropped a completion
+or the *model* never produced one. One live probe answered it — one
+request, the same model, the same question, the same token budget, with
+the provider's raw reply printed:
+
+```
+finish_reason    : length
+completion_tokens: 2048
+content          : None
+reasoning_content: 'Thinking. 1.  **Analyze the Request:** …'
+usage            : {"prompt_tokens": 127, "completion_tokens": 2048,
+                    "completion_tokens_details": {"reasoning_tokens": 2048}}
+```
+
+The model spent its entire completion budget thinking and was cut off
+before it said anything. The provider sent `content: null`. The plugin
+dropped nothing — it read the empty answer correctly — but it exposed
+two things that were wrong.
+
+6. **An empty reply was recorded as a step that had succeeded.** The
+   executor returned on the first candidate whose call did not raise, so
+   a null body became `status: ok` with an empty output, and **the next
+   routed model was never tried**. The evaluator noticed the empty
+   answer afterwards and downgraded the run to `partial`, but the
+   recovery never fired, and the run's own step table still said the
+   work had been done. An empty reply is now a failed attempt: the next
+   routed model gets its turn, a step where nothing answers fails with
+   `EmptyResponse` and says why, and the tokens the provider charged for
+   are still counted, because a reply that says nothing is not free.
+
+   The prose token budget was too small for a reasoning model as well:
+   2048 tokens is room for the reasoning *or* the answer, not both. It
+   is now a setting — `max_tokens`, 4096 by default — for the same
+   reason the file budget is one, since a limit is a cap and not a
+   charge: a model that answers in 200 tokens is still billed for 200.
+   The approval hook prices a step from the same budget, so the figure
+   a person is shown before approving is still the figure the guard
+   checks afterwards.
+
+   Six regression tests cover it, in `tests/test_pipeline.py`. The probe
+   is `scripts/probes/probe_empty_reply.py`.
+
 ### The demo video, and what measuring it cost
 
 The hackathon asks for a demo **under 90 seconds**. The full nine-phase
@@ -659,10 +708,10 @@ commit.
 
 ```
 $ python -m pytest tests/
-349 passed, 8 skipped in 16.08s
+355 passed, 8 skipped in 12.45s
 ```
 
-On an interpreter carrying Hermes' own `web` pins the same suite is **350
+On an interpreter carrying Hermes' own `web` pins the same suite is **356
 passed, 7 skipped** — the seventh skip is the environment test that reports the
 `fastapi`/`starlette` mismatch, and it passes once the versions agree. The pins
 are installed into a virtual environment, so the system interpreter is never
@@ -784,7 +833,7 @@ routes: ['/arena', '/execution', '/models', '/multimodal', '/overview', '/settin
 all handlers async: True
 ```
 
-and the whole suite runs **350 passed, 7 skipped** there — one more test
+and the whole suite runs **356 passed, 7 skipped** there — one more test
 passes and one fewer skips than on the system interpreter, because the
 environment test no longer has to substitute a stub router.
 
@@ -805,7 +854,7 @@ environment test no longer has to substitute a stub router.
 ### What the live exercise cost
 
 The project's GMI Cloud ceiling is **$10**. The live work so far has used
-roughly **$1.10** of it — about a ninth:
+roughly **$1.25** of it — about an eighth:
 
 | Activity | Estimated cost |
 | --- | --- |
@@ -828,6 +877,8 @@ roughly **$1.10** of it — about a ninth:
 | The code-speed probe (two chat completions against every code-capable model) | ≈ $0.005 |
 | The image-speed probe — four configurations, two of which ran | $0.0265 |
 | The generation latency samples — six real generations, timed one by one | $0.0795 |
+| Live demo run 7 — the run that came back `partial`, which found the eleventh defect | $0.1538796 |
+| The empty-reply probe — one request, to tell the plugin apart from the model | ≈ $0.0005 |
 
 Each of the six runs is a full nine-phase scenario against the real service:
 analyse, route, generate, implement through Hermes' tools, inspect, correct,

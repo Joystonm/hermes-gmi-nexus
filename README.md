@@ -57,7 +57,7 @@ plugin **directory**, so development tooling must not travel inside it.
 | [`scripts/demo_video.py`](scripts/demo_video.py) | The short live run the demo video records — five phases, under ninety seconds. |
 | [`scripts/validate_installation.py`](scripts/validate_installation.py) | Loads the plugin the way Hermes loads it and proves the contract holds. |
 | [`scripts/make_banner.py`](scripts/make_banner.py) | Draws the banner. A development tool — it needs Pillow, which the plugin itself does not. |
-| [`scripts/probes/`](scripts/probes/) | The one-off scripts that found seven of the ten defects the mocked tests could not. Not part of the plugin; each one is documented in [its README](scripts/probes/README.md). |
+| [`scripts/probes/`](scripts/probes/) | The one-off scripts that found seven of the eleven defects the mocked tests could not. Not part of the plugin; each one is documented in [its README](scripts/probes/README.md). |
 | [`BUILD_STATUS.md`](BUILD_STATUS.md) | What is done, what is not, and what was tested. |
 
 ---
@@ -225,17 +225,17 @@ GMI_API_KEY=<key> python scripts/demo_run.py --live --approve-spend
 and `--approve-spend`, it prints what it is about to spend before it spends
 it, and it does not raise the plugin's own limits.
 
-It has been run end to end against the real service, six times. That is how
-ten defects surfaced which the mocked tests could not find — among them a
+It has been run end to end against the real service, seven times. That is how
+eleven defects surfaced which the mocked tests could not find — among them a
 catalogue model that answered `"456"` for a number it had never seen, a code
 model whose replies came back cut off mid-JSON because the token budget was
 too small for a source file, a reported generation latency of 0.4
 seconds for a generation that had really taken half a minute, a rejected
 API key that was reported as an empty catalogue rather than as a rejected
 key, and a model the provider had already retired that the router kept
-choosing because the provider's real reason was swallowed. All ten are fixed,
-and all ten have regression tests. The whole live exercise cost **just over
-$1** of the project's $10 ceiling;
+choosing because the provider's real reason was swallowed. All eleven are
+fixed, and all eleven have regression tests. The whole live exercise cost
+**just over $1** of the project's $10 ceiling;
 [`BUILD_STATUS.md`](BUILD_STATUS.md) accounts for every figure.
 
 ### The short run, for recording
